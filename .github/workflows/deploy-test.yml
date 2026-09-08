@@ -1,0 +1,36 @@
+name: Deploy TEST
+
+# TEST builds the image that PROD will later promote, so the tag it produces is
+# the release candidate identifier. Guard the `test` GitHub environment with
+# required reviewers if the team wants a gate here as well.
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: >-
+          Existing sha-<short> tag to promote. Leave blank to build the current
+          ref instead.
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/reusable-build-deploy.yml
+    with:
+      environment: test
+      overlay: test
+      namespace: ${{ vars.OPENSHIFT_NAMESPACE_TEST }}
+      registry: ${{ vars.OPENSHIFT_REGISTRY }}
+      image_repository: ${{ vars.OPENSHIFT_IMAGE_REPOSITORY }}
+      build: ${{ inputs.image_tag == '' }}
+      image_tag: ${{ inputs.image_tag }}
+    secrets:
+      OPENSHIFT_SERVER: ${{ secrets.OPENSHIFT_SERVER_TEST }}
+      OPENSHIFT_TOKEN: ${{ secrets.OPENSHIFT_TOKEN_TEST }}
+      REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+      REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}

@@ -1,0 +1,186 @@
+name: Infrastructure
+
+# Validates the vLLM Terraform modules and Helm chart on every change to
+# infrastructure/. Runs with no cloud credentials whatsoever: `terraform init
+# -backend=false` reaches the provider registry but never a cloud account, so
+# this workflow is safe on pull requests from forks. Anything that touches a
+# real subscription lives in infrastructure-plan-apply.yml behind environment
+# protection.
+
+on:
+  pull_request:
+    paths:
+      - "infrastructure/**"
+      - ".github/workflows/infrastructure.yml"
+  push:
+    branches: [main, dev]
+    paths:
+      - "infrastructure/**"
+      - ".github/workflows/infrastructure.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TERRAFORM_VERSION: "1.9.8"
+  HELM_VERSION: "v3.16.2"
+
+jobs:
+  terraform:
+    name: Terraform
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          # The wrapper rewrites stdout, which breaks the -diff output below.
+          terraform_wrapper: false
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive -diff infrastructure
+
+      # Modules and examples are initialised independently. Discovery is by
+      # glob rather than a hardcoded list so a new module cannot be added
+      # without also being validated.
+      - name: terraform validate
+        run: |
+          set -uo pipefail
+          failures=0
+          for dir in infrastructure/terraform/modules/*/*/ infrastructure/terraform/examples/*/*/; do
+            [ -f "${dir}versions.tf" ] || continue
+            echo "::group::${dir}"
+            terraform -chdir="$dir" init -backend=false -input=false -no-color \
+              && terraform -chdir="$dir" validate -no-color
+            status=$?
+            echo "::endgroup::"
+            if [ "$status" -ne 0 ]; then
+              echo "::error file=${dir}::terraform validate failed"
+              failures=$((failures + 1))
+            fi
+          done
+          exit "$failures"
+
+      - uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: v0.53.0
+
+      - name: tflint
+        run: |
+          set -uo pipefail
+          failures=0
+          tflint --init --config="$PWD/infrastructure/.tflint.hcl"
+          for dir in infrastructure/terraform/modules/*/*/ infrastructure/terraform/examples/*/*/; do
+            [ -f "${dir}versions.tf" ] || continue
+            echo "::group::${dir}"
+            tflint --chdir="$dir" --config="$PWD/infrastructure/.tflint.hcl" --format=compact
+            status=$?
+            echo "::endgroup::"
+            [ "$status" -ne 0 ] && failures=$((failures + 1))
+          done
+          exit "$failures"
+
+      # Report-only for now. A first checkov run against new IaC always
+      # produces a large baseline, and a hard gate before that baseline is
+      # triaged trains people to skip the check. Promote to a hard failure
+      # (drop soft_fail) once the findings are either fixed or explicitly
+      # skipped with a documented reason.
+      - name: checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: infrastructure/terraform
+          framework: terraform
+          quiet: true
+          soft_fail: true
+          output_format: cli,sarif
+          output_file_path: console,checkov.sarif
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: checkov-sarif
+          path: checkov.sarif
+          retention-days: 14
+
+  helm:
+    name: Helm chart
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: intl, zip
+          coverage: none
+
+      # symfony/yaml powers the structural validator. --no-scripts skips the
+      # Laravel post-install hooks, which would need an app key and a database.
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress --no-scripts
+
+      # Lints and templates every example combination. A bare `helm lint`
+      # fails by design - model.id has no default - so values are always
+      # supplied, and the PROD files are layered exactly as they are deployed.
+      - name: Render and lint
+        run: ./infrastructure/scripts/render.sh
+
+      - name: Structural validation
+        run: |
+          php infrastructure/scripts/validate-infrastructure.php \
+            --rendered=infrastructure/.render
+
+      # Schema-checks the rendered output against real Kubernetes API
+      # definitions, which helm template alone does not do.
+      - name: Validate against Kubernetes schemas
+        uses: yannh/kubeconform-action@v1
+        with:
+          args: >-
+            -strict
+            -summary
+            -ignore-missing-schemas
+            infrastructure/.render
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rendered-vllm-manifests
+          path: infrastructure/.render/
+          retention-days: 14
+
+  workflows:
+    name: Workflow syntax
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          coverage: none
+
+      - run: composer install --no-interaction --prefer-dist --no-progress --no-scripts
+
+      - name: Parse every workflow
+        run: |
+          php -r '
+            require "vendor/autoload.php";
+            $failed = 0;
+            foreach (glob(".github/workflows/*.yml") as $file) {
+              try {
+                Symfony\Component\Yaml\Yaml::parseFile($file);
+              } catch (Throwable $e) {
+                fwrite(STDERR, $file.": ".$e->getMessage()."\n");
+                $failed++;
+              }
+            }
+            exit($failed === 0 ? 0 : 1);
+          '

@@ -1,0 +1,518 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "BC AI Gateway API",
+        "description": "Health and gateway APIs for the BC AI Gateway.",
+        "version": "1.0.0"
+    },
+    "servers": [
+        {
+            "url": "/",
+            "description": "Current application host"
+        }
+    ],
+    "paths": {
+        "/api/gateway/test": {
+            "get": {
+                "tags": [
+                    "Gateway"
+                ],
+                "summary": "Validate an application machine principal",
+                "operationId": "gatewayProbe",
+                "responses": {
+                    "200": {
+                        "description": "Machine principal is authorized"
+                    },
+                    "401": {
+                        "description": "Bearer token is invalid"
+                    },
+                    "403": {
+                        "description": "Required scope is missing"
+                    }
+                },
+                "security": [
+                    {
+                        "machineBearer": [
+                            "gateway.invoke"
+                        ]
+                    }
+                ]
+            }
+        },
+        "/api/status": {
+            "get": {
+                "tags": [
+                    "System"
+                ],
+                "summary": "Return application status",
+                "operationId": "status",
+                "responses": {
+                    "200": {
+                        "description": "Application is running"
+                    }
+                }
+            }
+        },
+        "/api/ready": {
+            "get": {
+                "tags": [
+                    "System"
+                ],
+                "summary": "Check required service connections",
+                "operationId": "readiness",
+                "responses": {
+                    "200": {
+                        "description": "Application is ready"
+                    },
+                    "503": {
+                        "description": "A required service is unavailable"
+                    }
+                }
+            }
+        },
+        "/oauth/token": {
+            "post": {
+                "tags": [
+                    "OAuth"
+                ],
+                "summary": "Exchange application machine credentials for an opaque bearer token",
+                "operationId": "issueMachineToken",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "required": [
+                                    "grant_type",
+                                    "api_directory_client_id"
+                                ],
+                                "properties": {
+                                    "grant_type": {
+                                        "type": "string",
+                                        "example": "client_credentials"
+                                    },
+                                    "api_directory_client_id": {
+                                        "type": "string"
+                                    },
+                                    "client_id": {
+                                        "type": "string"
+                                    },
+                                    "client_secret": {
+                                        "type": "string",
+                                        "format": "password"
+                                    },
+                                    "scope": {
+                                        "type": "string",
+                                        "example": "gateway.invoke"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Bearer token issued"
+                    },
+                    "400": {
+                        "description": "OAuth request is invalid"
+                    },
+                    "401": {
+                        "description": "Client authentication failed"
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded"
+                    }
+                }
+            }
+        },
+        "/v1/models": {
+            "get": {
+                "tags": [
+                    "OpenAI-compatible gateway"
+                ],
+                "summary": "List models granted to the authenticated application",
+                "operationId": "07ffcd60b06db18c888bdeef1ef9cd4e",
+                "responses": {
+                    "200": {
+                        "description": "Granted models"
+                    },
+                    "401": {
+                        "description": "Invalid bearer token",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OpenAiError"
+                                }
+                            }
+                        }
+                    },
+                    "403": {
+                        "description": "Insufficient scope",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OpenAiError"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "machineBearer": [
+                            "gateway.invoke"
+                        ]
+                    }
+                ]
+            }
+        },
+        "/v1/chat/completions": {
+            "post": {
+                "tags": [
+                    "OpenAI-compatible gateway"
+                ],
+                "summary": "Create an OpenAI-compatible chat completion",
+                "operationId": "a5ff5bbb7beb63df26701280db8c326d",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ChatCompletionRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Completion or SSE stream"
+                    },
+                    "422": {
+                        "description": "Invalid request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OpenAiError"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Rate or concurrency limit",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OpenAiError"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "machineBearer": [
+                            "gateway.invoke"
+                        ]
+                    }
+                ]
+            }
+        },
+        "/v1/responses": {
+            "post": {
+                "tags": [
+                    "OpenAI-compatible gateway"
+                ],
+                "summary": "Create an OpenAI-compatible response",
+                "operationId": "d3ac390881f96d5088ee3b8171c095d8",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ResponseRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Response or SSE stream"
+                    },
+                    "422": {
+                        "description": "Invalid request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OpenAiError"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Rate or concurrency limit",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OpenAiError"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "machineBearer": [
+                            "gateway.invoke"
+                        ]
+                    }
+                ]
+            }
+        },
+        "/v1/embeddings": {
+            "post": {
+                "tags": [
+                    "OpenAI-compatible gateway"
+                ],
+                "summary": "Create OpenAI-compatible embeddings",
+                "operationId": "372d2420fda4c15d0591224719f07cde",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/EmbeddingRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Embedding list"
+                    },
+                    "422": {
+                        "description": "Invalid request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OpenAiError"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Rate or concurrency limit",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OpenAiError"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "machineBearer": [
+                            "gateway.invoke"
+                        ]
+                    }
+                ]
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "OpenAiError": {
+                "required": [
+                    "error"
+                ],
+                "properties": {
+                    "error": {
+                        "required": [
+                            "message",
+                            "type",
+                            "code"
+                        ],
+                        "properties": {
+                            "message": {
+                                "type": "string"
+                            },
+                            "type": {
+                                "type": "string"
+                            },
+                            "param": {
+                                "type": "string",
+                                "nullable": true
+                            },
+                            "code": {
+                                "type": "string"
+                            }
+                        },
+                        "type": "object"
+                    },
+                    "request_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    }
+                },
+                "type": "object"
+            },
+            "ChatCompletionRequest": {
+                "required": [
+                    "model",
+                    "messages"
+                ],
+                "properties": {
+                    "model": {
+                        "type": "string",
+                        "maxLength": 128
+                    },
+                    "messages": {
+                        "type": "array",
+                        "items": {
+                            "required": [
+                                "role",
+                                "content"
+                            ],
+                            "properties": {
+                                "role": {
+                                    "type": "string",
+                                    "enum": [
+                                        "system",
+                                        "user",
+                                        "assistant",
+                                        "tool"
+                                    ]
+                                },
+                                "content": {
+                                    "oneOf": [
+                                        {
+                                            "type": "string"
+                                        },
+                                        {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    ]
+                                }
+                            },
+                            "type": "object"
+                        }
+                    },
+                    "max_tokens": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "stream": {
+                        "type": "boolean",
+                        "default": false
+                    }
+                },
+                "type": "object"
+            },
+            "ResponseRequest": {
+                "required": [
+                    "model",
+                    "input"
+                ],
+                "properties": {
+                    "model": {
+                        "type": "string",
+                        "maxLength": 128
+                    },
+                    "input": {
+                        "oneOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "array",
+                                "items": {
+                                    "type": "object"
+                                }
+                            }
+                        ]
+                    },
+                    "instructions": {
+                        "type": "string"
+                    },
+                    "max_output_tokens": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "stream": {
+                        "type": "boolean",
+                        "default": false
+                    }
+                },
+                "type": "object"
+            },
+            "EmbeddingRequest": {
+                "required": [
+                    "model",
+                    "input"
+                ],
+                "properties": {
+                    "model": {
+                        "type": "string",
+                        "maxLength": 128
+                    },
+                    "input": {
+                        "oneOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            }
+                        ]
+                    },
+                    "encoding_format": {
+                        "type": "string",
+                        "enum": [
+                            "float",
+                            "base64"
+                        ]
+                    },
+                    "dimensions": {
+                        "type": "integer",
+                        "minimum": 1
+                    }
+                },
+                "type": "object"
+            }
+        },
+        "securitySchemes": {
+            "machineBearer": {
+                "type": "http",
+                "bearerFormat": "Opaque",
+                "scheme": "bearer"
+            }
+        }
+    },
+    "tags": [
+        {
+            "name": "Gateway",
+            "description": "Gateway"
+        },
+        {
+            "name": "System",
+            "description": "System"
+        },
+        {
+            "name": "OAuth",
+            "description": "OAuth"
+        },
+        {
+            "name": "OpenAI-compatible gateway",
+            "description": "OpenAI-compatible gateway"
+        }
+    ]
+}

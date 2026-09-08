@@ -1,0 +1,36 @@
+name: Deploy DEV
+
+# DEV is the only environment that may run a freshly built image without a
+# promotion step, and the only one allowed a mutable tag.
+#
+# There is no git remote configured for this repository yet, so registry and
+# namespace come from repository variables rather than being hardcoded:
+#
+#   vars.OPENSHIFT_REGISTRY          e.g. ghcr.io
+#   vars.OPENSHIFT_IMAGE_REPOSITORY  e.g. bcgov/bcaigw
+#   vars.OPENSHIFT_NAMESPACE_DEV     e.g. abc123-dev
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [dev]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/reusable-build-deploy.yml
+    with:
+      environment: dev
+      overlay: dev
+      namespace: ${{ vars.OPENSHIFT_NAMESPACE_DEV }}
+      registry: ${{ vars.OPENSHIFT_REGISTRY }}
+      image_repository: ${{ vars.OPENSHIFT_IMAGE_REPOSITORY }}
+      build: true
+    secrets:
+      OPENSHIFT_SERVER: ${{ secrets.OPENSHIFT_SERVER_DEV }}
+      OPENSHIFT_TOKEN: ${{ secrets.OPENSHIFT_TOKEN_DEV }}
+      REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+      REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
