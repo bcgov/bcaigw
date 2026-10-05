@@ -74,6 +74,27 @@ objects:
         image-stream: ${NAME}
         image-stream-tag: ${IMAGE_TAG}
       name: ${NAME}
+  # Optional: mirror the Bifrost OSS image into the tools namespace so deployments
+  # can pull it from the internal registry. Only OSS features run - no Maxim/
+  # enterprise key is involved. Populate via `make oc-import-bifrost`.
+  - apiVersion: v1
+    kind: ImageStream
+    spec:
+      lookupPolicy:
+        local: false
+      tags:
+        - name: ${BIFROST_IMAGE_TAG}
+          from:
+            kind: DockerImage
+            name: ${BIFROST_SOURCE_IMAGE}
+          referencePolicy:
+            type: Local
+          importPolicy:
+            scheduled: false
+    metadata:
+      labels:
+        image-stream: bifrost
+      name: bifrost
 parameters:
   - name: NAME
     required: true
@@ -128,4 +149,12 @@ parameters:
   - name: VAULT_ENV
     required: false
   - name: LOGIN_TOKEN_SECRET
+    required: false
+  - name: BIFROST_SOURCE_IMAGE
+    description: Upstream Bifrost OSS image to mirror
+    value: 'artifacts.developer.gov.bc.ca/docker-remote/maximhq/bifrost:v1.3.9'
+    required: false
+  - name: BIFROST_IMAGE_TAG
+    description: Tag to publish on the internal bifrost ImageStream
+    value: 'v1.3.9'
     required: false

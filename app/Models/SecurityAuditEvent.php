@@ -2,8 +2,6 @@
 
 namespace App\Models;
 
-use App\Enums\AuditEventType;
-use App\Enums\AuditOutcome;
 use Illuminate\Database\Eloquent\Model;
 use LogicException;
 
@@ -24,8 +22,6 @@ final class SecurityAuditEvent extends Model
     protected function casts(): array
     {
         return [
-            'event_type' => AuditEventType::class,
-            'outcome' => AuditOutcome::class,
             'context' => 'array',
             'created_at' => 'immutable_datetime',
         ];

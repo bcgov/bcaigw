@@ -2,9 +2,6 @@
 
 namespace App\Models;
 
-use App\Enums\CallAttemptStatus;
-use App\Enums\ContentState;
-use App\Enums\GatewayOperation;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -23,10 +20,7 @@ class GatewayCallAttempt extends Model
     protected function casts(): array
     {
         return [
-            'operation' => GatewayOperation::class,
             'streaming' => 'boolean',
-            'status' => CallAttemptStatus::class,
-            'content_state' => ContentState::class,
             'content_retention_enabled' => 'boolean',
             'client_cancelled' => 'boolean',
             'partial_response' => 'boolean',
@@ -47,11 +41,6 @@ class GatewayCallAttempt extends Model
     public function application(): BelongsTo
     {
         return $this->belongsTo(Application::class);
-    }
-
-    public function credential(): BelongsTo
-    {
-        return $this->belongsTo(MachineCredential::class, 'machine_credential_id');
     }
 
     public function alias(): BelongsTo

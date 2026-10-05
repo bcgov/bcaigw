@@ -27,8 +27,8 @@ jobs:
       cancel-in-progress: true
     env:
       BUILD_ID: ${{ github.event.number }}
-      NAMESPACE: fe1642-dev
-      BUILD_NAMESPACE: fe1642-tools
+      NAMESPACE: c19cc5-dev
+      BUILD_NAMESPACE: c19cc5-tools
       BUILD_REF: ${{ github.base_ref }}
       HOST_PREFIX: bcaigw
       SOURCE_REPOSITORY_BRANCH: dev
@@ -52,7 +52,7 @@ jobs:
       # PR's must originate from a branch off the original repo or else all openshift `oc` commands will fail.
       - name: Log in to OpenShift
         run: |
-          oc login --token=${{ secrets.SA_TOKEN }} --server=https://api.gold.devops.gov.bc.ca:6443
+          oc login --token=${{ secrets.SA_TOKEN }} --server=https://api.silver.devops.gov.bc.ca:6443
       - name: OC Build from yaml
         working-directory: "./openshift"
         run: |
@@ -74,8 +74,8 @@ jobs:
     #if: ${{ github.event.pull_request.merged == true && github.base_ref != 'prod' && github.base_ref != 'test'}}
     env:
       BUILD_ID: ${{ github.event.number }}
-      NAMESPACE: fe1642-dev
-      BUILD_NAMESPACE: fe1642-tools
+      NAMESPACE: c19cc5-dev
+      BUILD_NAMESPACE: c19cc5-tools
       BUILD_REF: ${{ github.base_ref }}
       HOST_PREFIX: bcaigw
       SOURCE_REPOSITORY_BRANCH: dev
@@ -104,7 +104,7 @@ jobs:
       # PR's must originate from a branch off the original repo or else all openshift `oc` commands will fail.
       - name: Log in to OpenShift
         run: |
-          oc login --token=${{ secrets.SA_TOKEN }} --server=https://api.gold.devops.gov.bc.ca:6443
+          oc login --token=${{ secrets.SA_TOKEN }} --server=https://api.silver.devops.gov.bc.ca:6443
       # Deploy the BCAIGW.
       - name: Deploy BCAIGW dev
         working-directory: "./openshift"

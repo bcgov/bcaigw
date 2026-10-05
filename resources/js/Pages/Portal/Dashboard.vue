@@ -1,41 +1,87 @@
 <script setup>
-import { Head, Link, usePage } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { Link } from '@inertiajs/vue3';
+import PortalLayout from '@/Layouts/PortalLayout.vue';
 
-const page = usePage();
-const user = computed(() => page.props.auth.user);
+defineProps({
+    applications: { type: Array, default: () => [] },
+    stats: { type: Object, default: () => ({ total: 0, draft: 0, submitted: 0, active: 0 }) },
+});
+
+const statusLabel = (status) => status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 </script>
 
 <template>
-    <Head title="Portal" />
-    <main class="min-h-screen bg-slate-50">
-        <header class="border-b-4 border-bc-gold bg-bc-blue px-6 py-5 text-white">
-            <div class="mx-auto flex max-w-5xl items-center justify-between">
+    <PortalLayout>
+        <template #default="{ user }">
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <div>
-                    <p class="text-sm font-semibold uppercase tracking-wider">BC AI Gateway</p>
-                    <h1 class="text-2xl font-bold">Application owner portal</h1>
+                    <p class="bcgov-eyebrow text-bc-blue mb-1">Portal</p>
+                    <h2 class="h3 fw-bold mb-0">Welcome{{ user ? `, ${user.name}` : '' }}.</h2>
                 </div>
-                <Link href="/portal/logout" method="post" as="button" class="rounded border px-4 py-2 font-semibold">
-                    Sign out
-                </Link>
+                <Link href="/portal/applications/create" class="btn btn-primary">New application</Link>
             </div>
-        </header>
-        <section class="mx-auto max-w-5xl px-6 py-12">
-            <div class="rounded-lg bg-white p-8 shadow-sm">
-                <h2 class="text-xl font-bold">Welcome, {{ user.name }}</h2>
-                <p class="mt-2 text-slate-700">IDIR: {{ user.idir_username }}</p>
-                <p class="mt-1 text-slate-700">Portal role: {{ user.portal_role }}</p>
-                <Link href="/portal/applications" class="mt-6 mr-6 inline-flex font-semibold text-bc-blue underline">
-                    My applications
-                </Link>
-                <Link
-                    v-if="user.portal_role === 'administrator'"
-                    href="/portal/admin"
-                    class="mt-6 inline-flex font-semibold text-bc-blue underline"
-                >
-                    Administration
-                </Link>
+
+            <div class="row g-3 mt-3">
+                <div class="col-6 col-sm-3">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-body">
+                            <p class="display-6 fw-bold mb-0">{{ stats.total }}</p>
+                            <p class="text-secondary small mb-0">Total</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-sm-3">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-body">
+                            <p class="display-6 fw-bold mb-0">{{ stats.draft }}</p>
+                            <p class="text-secondary small mb-0">Draft</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-sm-3">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-body">
+                            <p class="display-6 fw-bold mb-0">{{ stats.submitted }}</p>
+                            <p class="text-secondary small mb-0">Submitted</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-sm-3">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-body">
+                            <p class="display-6 fw-bold mb-0">{{ stats.active }}</p>
+                            <p class="text-secondary small mb-0">Active</p>
+                        </div>
+                    </div>
+                </div>
             </div>
-        </section>
-    </main>
+
+            <div class="card shadow-sm mt-4">
+                <div class="card-body">
+                    <h3 class="h5 fw-bold">Your applications</h3>
+                    <p v-if="applications.length === 0" class="text-secondary mb-0">
+                        You have no applications yet.
+                        <Link href="/portal/applications/create" class="text-bc-blue">Create one</Link>.
+                    </p>
+                    <ul v-else class="list-group list-group-flush">
+                        <li
+                            v-for="application in applications"
+                            :key="application.public_id"
+                            class="list-group-item d-flex align-items-center justify-content-between px-0"
+                        >
+                            <div>
+                                <Link :href="`/portal/applications/${application.public_id}`" class="fw-semibold text-bc-blue">
+                                    {{ application.name }}
+                                </Link>
+                                <p class="text-secondary small mb-0">{{ application.ministry_organization }}</p>
+                            </div>
+                            <span class="badge bg-secondary-subtle text-secondary-emphasis rounded-pill">
+                                {{ statusLabel(application.status) }}
+                            </span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </template>
+    </PortalLayout>
 </template>

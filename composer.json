@@ -7,15 +7,18 @@
     "license": "MIT",
     "require": {
         "php": "^8.3",
-        "aws/aws-sdk-php": ">=3.300 <4.0",
         "ext-bcmath": "*",
+        "aws/aws-sdk-php": ">=3.300 <4.0",
         "darkaonline/l5-swagger": "11.*",
+        "firebase/php-jwt": "^7.1",
         "inertiajs/inertia-laravel": "2.*",
         "laravel/framework": "^13.0",
         "laravel/sanctum": "4.*",
         "laravel/tinker": "^3.0",
+        "nwidart/laravel-modules": "^13.0",
         "predis/predis": "2.*",
-        "stevenmaguire/oauth2-keycloak": "6.*"
+        "stevenmaguire/oauth2-keycloak": "6.*",
+        "wikimedia/composer-merge-plugin": "^2.1"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
@@ -76,6 +79,11 @@
     "extra": {
         "laravel": {
             "dont-discover": []
+        },
+        "merge-plugin": {
+            "include": [
+                "Modules/*/composer.json"
+            ]
         }
     },
     "config": {
@@ -84,7 +92,8 @@
         "sort-packages": true,
         "allow-plugins": {
             "pestphp/pest-plugin": true,
-            "php-http/discovery": true
+            "php-http/discovery": true,
+            "wikimedia/composer-merge-plugin": true
         }
     },
     "minimum-stability": "stable",

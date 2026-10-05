@@ -104,7 +104,7 @@ To grant yourself administrator on a fresh local database, after your first
 successful sign-in:
 
 ```powershell
-docker compose exec -T webserver php artisan tinker --execute="\App\Models\User::query()->where('idir_username','YOUR_IDIR')->firstOrFail()->update(['portal_role' => \App\Enums\PortalRole::Administrator]);"
+docker compose exec -T webserver php artisan tinker --execute="\$u=\App\Models\User::query()->where('idir_username','YOUR_IDIR')->firstOrFail(); \$r=\App\Models\Role::where('name',\App\Models\Role::SUPER_ADMIN)->firstOrFail(); \$u->roles()->syncWithoutDetaching([\$r->id]);"
 ```
 
 This is a local bootstrap convenience only. In deployed environments the first

@@ -7,12 +7,17 @@ use Tests\TestCase;
 
 class BaselineTest extends TestCase
 {
-    public function test_home_page_renders_the_inertia_application(): void
+    public function test_root_redirects_to_login(): void
     {
-        $this->get('/')
+        $this->get('/')->assertRedirect('/login');
+    }
+
+    public function test_login_page_renders_the_inertia_application(): void
+    {
+        $this->get('/login')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                ->component('Home')
+                ->component('Auth/Login')
                 ->where('appName', 'BC AI Gateway')
             );
     }
@@ -20,13 +25,5 @@ class BaselineTest extends TestCase
     public function test_liveness_endpoint_is_available(): void
     {
         $this->get('/up')->assertOk();
-    }
-
-    public function test_api_status_endpoint_is_available(): void
-    {
-        $this->getJson('/api/status')
-            ->assertOk()
-            ->assertJsonPath('status', 'ok')
-            ->assertJsonStructure(['service', 'timestamp']);
     }
 }

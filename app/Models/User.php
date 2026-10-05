@@ -2,33 +2,45 @@
 
 namespace App\Models;
 
-use App\Enums\PortalRole;
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
-use Database\Factories\UserFactory;
-use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
-#[Fillable([
-    'keycloak_subject',
-    'idir_user_guid',
-    'idir_username',
-    'name',
-    'first_name',
-    'last_name',
-    'email',
-    'portal_role',
-    'last_login_at',
-])]
-#[Hidden(['password', 'remember_token', 'keycloak_subject', 'idir_user_guid'])]
 class User extends Authenticatable
 {
-    /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable, SoftDeletes;
+
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @var array<int, string>
+     */
+    protected $fillable = [
+        'guid',
+        'name',
+        'first_name',
+        'last_name',
+        'disabled',
+        'email',
+        'password',
+        'idir_user_guid',
+        'idir_username',
+        'last_touch_by_user_guid',
+    ];
+
+    /**
+     * The attributes that should be hidden for serialization.
+     *
+     * @var array<int, string>
+     */
+    protected $hidden = [
+        'password',
+        'remember_token',
+    ];
 
     /**
      * Get the attributes that should be cast.
@@ -40,20 +52,49 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
-            'portal_role' => PortalRole::class,
-            'last_login_at' => 'datetime',
+            'disabled' => 'boolean',
         ];
     }
 
-    public function isAdministrator(): bool
+    /**
+     * The roles that belong to the user.
+     */
+    public function roles(): BelongsToMany
     {
-        return $this->portal_role === PortalRole::Administrator;
+        return $this->belongsToMany(Role::class, 'role_user');
     }
 
+    /**
+     * The applications the user is a member of.
+     */
     public function applications(): BelongsToMany
     {
         return $this->belongsToMany(Application::class, 'application_user')
             ->withPivot(['role', 'created_by'])
             ->withTimestamps();
+    }
+
+    /**
+     * Determine whether the user has the given role.
+     */
+    public function hasRole(string $role): bool
+    {
+        return $this->roles->contains('name', $role);
+    }
+
+    /**
+     * Determine whether the user holds an administrative role.
+     */
+    public function isAdministrator(): bool
+    {
+        return $this->hasRole(Role::SUPER_ADMIN) || $this->hasRole(Role::Ministry_ADMIN);
+    }
+
+    /**
+     * Scope a query to only active (not disabled) users.
+     */
+    public function scopeIsActive(Builder $query): Builder
+    {
+        return $query->where('disabled', false);
     }
 }

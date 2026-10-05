@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Enums\ControlPlaneStatus;
 use Database\Factories\PublicModelAliasFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -32,7 +31,6 @@ class PublicModelAlias extends Model
     {
         return [
             'capabilities' => 'array',
-            'status' => ControlPlaneStatus::class,
         ];
     }
 

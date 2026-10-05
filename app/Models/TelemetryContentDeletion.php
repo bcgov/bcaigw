@@ -2,8 +2,6 @@
 
 namespace App\Models;
 
-use App\Enums\TelemetryDeletionMode;
-use App\Enums\TelemetryDeletionScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
@@ -18,8 +16,6 @@ final class TelemetryContentDeletion extends Model
     protected function casts(): array
     {
         return [
-            'scope' => TelemetryDeletionScope::class,
-            'mode' => TelemetryDeletionMode::class,
             'request_ids' => 'array',
             'range_from' => 'immutable_datetime',
             'range_to' => 'immutable_datetime',

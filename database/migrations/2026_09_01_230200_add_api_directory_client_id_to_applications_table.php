@@ -10,15 +10,15 @@ return new class extends Migration
     {
         Schema::table('applications', function (Blueprint $table) {
             $table->string('api_directory_client_id')
-                ->after('public_id')
-                ->unique();
+                ->after('public_id');
+                // ->unique();
         });
     }
 
     public function down(): void
     {
         Schema::table('applications', function (Blueprint $table) {
-            $table->dropUnique(['api_directory_client_id']);
+            // $table->dropUnique(['api_directory_client_id']);
             $table->dropColumn('api_directory_client_id');
         });
     }

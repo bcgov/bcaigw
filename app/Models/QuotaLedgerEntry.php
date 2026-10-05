@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Enums\QuotaLedgerEvent;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use LogicException;
@@ -16,7 +15,6 @@ final class QuotaLedgerEntry extends Model
     protected function casts(): array
     {
         return [
-            'event_type' => QuotaLedgerEvent::class,
             'budget_snapshot' => 'array',
             'usage_missing' => 'boolean',
             'created_at' => 'immutable_datetime',

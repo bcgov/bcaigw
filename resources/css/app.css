@@ -1,48 +1,71 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* BC AI Gateway — Bootstrap 5 theme (Province of British Columbia branding).
+   Bootstrap core + icons are loaded via CDN in resources/views/app.blade.php. */
 
-.font-medium {
-    font-weight: 500;
-}
-
-.text-sm {
-    font-size: .875rem;
-    line-height: 1.25rem;
-}
-.text-gray-700 {
-    opacity: 1;
-    color: #374151;
+:root {
+    --bc-blue: #003366;
+    --bc-gold: #fcba19;
+    --bs-link-color: #1a5a96;
+    --bs-link-hover-color: #003366;
 }
 
-nav ul.navbar-nav a{
-    text-decoration: none;
-    line-height: 32px;
-}
-nav ul.navbar-nav a:hover{
-    /*color: white;*/
-}
-.border-indigo-400 {
-    --tw-border-opacity: 1;
-    border-color: white;
-}
-.navlink-active{
-    color: white !important;
+body {
+    background-color: #f2f2f2;
+    color: #313132;
 }
 
-.btn{
+/* Provincial header bar */
+.bcgov-navbar {
+    background-color: var(--bc-blue);
+    border-bottom: 4px solid var(--bc-gold);
+}
+
+.bcgov-navbar .navbar-brand,
+.bcgov-navbar .nav-link,
+.bcgov-navbar .navbar-text {
+    color: #ffffff;
+}
+
+.bcgov-navbar .nav-link:hover,
+.bcgov-navbar .nav-link:focus {
+    color: var(--bc-gold);
+}
+
+.bcgov-navbar .nav-link.active {
+    color: var(--bc-gold) !important;
+    font-weight: 600;
+}
+
+.bcgov-eyebrow {
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+/* Buttons themed to provincial blue */
+.btn-primary {
+    --bs-btn-bg: var(--bc-blue);
+    --bs-btn-border-color: var(--bc-blue);
+    --bs-btn-hover-bg: #00264d;
+    --bs-btn-hover-border-color: #00264d;
+    --bs-btn-active-bg: #00264d;
+    --bs-btn-active-border-color: #00264d;
+    --bs-btn-disabled-bg: var(--bc-blue);
+    --bs-btn-disabled-border-color: var(--bc-blue);
+}
+
+.btn-outline-primary {
+    --bs-btn-color: var(--bc-blue);
+    --bs-btn-border-color: var(--bc-blue);
+    --bs-btn-hover-bg: var(--bc-blue);
+    --bs-btn-hover-border-color: var(--bc-blue);
+    --bs-btn-active-bg: var(--bc-blue);
+}
+
+.text-bc-blue {
+    color: var(--bc-blue) !important;
+}
+
+.btn {
     box-shadow: none !important;
-}
-.font-light {
-    font-weight: 200;
-}
-.navbar-collapse {
-    visibility: visible !important;
-}
-.accordion-item .collapse {
-    visibility: visible !important;
-}
-
-.navbar .collapse.show {
-    visibility: initial;
 }

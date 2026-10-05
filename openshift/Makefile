@@ -1,17 +1,19 @@
 ## get values from Github actions yml file. under env
 export GIT_LOCAL_BRANCH?=$(shell git rev-parse --abbrev-ref HEAD)
-export NAMESPACE := $(or $(NAMESPACE), fe1642-dev)
+export NAMESPACE := $(or $(NAMESPACE), c19cc5-dev)
 export APP_NAME := $(or $(PROJECT_NAME), bcaigw)
 export BUILD_ID := $(or $(BUILD_ID), 1)
 export BUILD_REF := $(or $(BUILD_REF), $(GIT_LOCAL_BRANCH))
-export LICENSE_PLATE := $(or $(LICENSE_PLATE), fe1642)
+export LICENSE_PLATE := $(or $(LICENSE_PLATE), c19cc5)
 export LICENSE_BRANCH := $(or $(LICENSE_BRANCH), nonprod)
-export BUILD_NAMESPACE := $(or $(BUILD_NAMESPACE), fe1642-tools)
-export DOMAIN := $(or $(DOMAIN), apps.gold.devops.gov.bc.ca)
+export BUILD_NAMESPACE := $(or $(BUILD_NAMESPACE), c19cc5-tools)
+export DOMAIN := $(or $(DOMAIN), apps.silver.devops.gov.bc.ca)
 export HOST_PREFIX := $(or $(HOST_PREFIX), bcaigw)
 export SOURCE_REPOSITORY_BRANCH := $(or $(SOURCE_REPOSITORY_BRANCH), dev)
 export BACKUP_POSTGRESQL_APP_NAME := $(or $(BACKUP_POSTGRESQL_APP_NAME), bcaigw-patroni-backup)
 export BACKUP_CONFIGMAP_NAME := $(or $(BACKUP_CONFIGMAP_NAME), bcaigw-patroni-backup-conf)
+export BIFROST_IMAGE_TAG := $(or $(BIFROST_IMAGE_TAG), v1.3.9)
+export BIFROST_SOURCE_IMAGE := $(or $(BIFROST_SOURCE_IMAGE), artifacts.developer.gov.bc.ca/docker-remote/maximhq/bifrost:v1.3.9)
 
 ##if
 ifeq ($(GIT_LOCAL_BRANCH),dev)
@@ -66,7 +68,7 @@ endef
 
 
 define HOST
-"$(HOST_PREFIX)-$(BUILD_NAMESPACE).apps.gold.devops.gov.bc.ca.$(DOMAIN)"
+"$(HOST_PREFIX)-$(BUILD_NAMESPACE).apps.silver.devops.gov.bc.ca.$(DOMAIN)"
 endef
 
 define SOURCE_REPOSITORY_REF
@@ -82,6 +84,7 @@ oc-build-web: | print-status build-web
 oc-deploy-web: | print-status deploy-web
 oc-build-patroni: | print-status build-patroni
 oc-deploy-patroni: | print-status deploy-patroni
+oc-import-bifrost: | print-status import-bifrost
 
 print-status:
 	@echo " +---------------------------------------------------------+ "
@@ -104,7 +107,7 @@ print-status:
 	@echo " | PARAM_FILE: 					$(PARAM_FILE) |"
 	@echo " | LICENSE_PLATE: 				$(LICENSE_PLATE) |"
 
-#	"$(HOST_PREFIX)-$(BUILD_NAMESPACE).apps.gold.devops.gov.bc.ca.$(DOMAIN)"
+#	"$(HOST_PREFIX)-$(BUILD_NAMESPACE).apps.silver.devops.gov.bc.ca.$(DOMAIN)"
 	@echo " +---------------------------------------------------------+ "
 
 build-web:
@@ -124,6 +127,14 @@ deploy-web:
 	@oc -n $(NAMESPACE) process -f $(DEPLOY_FILE) --param-file=$(PARAM_FILE) | oc -n $(NAMESPACE) apply -f -
 	$(call rollout_and_wait,dc/$(HOST_PREFIX))
 	@echo "+\n++ FINISHED Deploying Web\n+"
+
+# Mirror the OSS Bifrost image into the tools namespace (OSS only, no Maxim/enterprise key).
+import-bifrost:
+	test -n "$(BUILD_NAMESPACE)"
+	@echo "+\n++ Importing Bifrost OSS image into $(BUILD_NAMESPACE)\n+"
+	@oc -n $(BUILD_NAMESPACE) process -f bc.yaml --param-file=$(PARAM_FILE) | oc -n $(BUILD_NAMESPACE) apply -f -
+	@oc -n $(BUILD_NAMESPACE) import-image bifrost:$(BIFROST_IMAGE_TAG) --from=$(BIFROST_SOURCE_IMAGE) --confirm --reference-policy=local
+	@echo "+\n++ FINISHED Importing Bifrost\n+"
 
 build-patroni:
 	@oc -n $(BUILD_NAMESPACE) process -f patroni-build.yaml -p NAME=bcaigw-patroni -p TAG="12.4-latest" -p BASE_IMAGE_NAME=postgres -p BASE_IMAGE_TAG="12.4" -p SOURCE_REPOSITORY_REF="main" -p SOURCE_CONTEXT_DIR="apps/pgsql/patroni/docker" | oc -n $(BUILD_NAMESPACE) apply -f -

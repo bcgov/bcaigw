@@ -2,9 +2,6 @@
 
 namespace App\Models;
 
-use App\Enums\ApplicationEnvironment;
-use App\Enums\ControlPlaneStatus;
-use App\Enums\TargetHealthStatus;
 use Database\Factories\UpstreamTargetFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -33,10 +30,7 @@ class UpstreamTarget extends Model
     protected function casts(): array
     {
         return [
-            'environment' => ApplicationEnvironment::class,
             'capabilities' => 'array',
-            'health_status' => TargetHealthStatus::class,
-            'status' => ControlPlaneStatus::class,
             'connection_settings' => 'array',
             'last_health_checked_at' => 'immutable_datetime',
         ];

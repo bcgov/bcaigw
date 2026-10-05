@@ -2,9 +2,6 @@
 
 namespace App\Models;
 
-use App\Enums\ApplicationEnvironment;
-use App\Enums\ControlPlaneStatus;
-use App\Enums\ProviderType;
 use Database\Factories\ProviderAccountFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -34,11 +31,8 @@ class ProviderAccount extends Model
     protected function casts(): array
     {
         return [
-            'type' => ProviderType::class,
-            'environment' => ApplicationEnvironment::class,
             'configuration' => 'array',
             'sensitive_configuration' => 'encrypted:array',
-            'status' => ControlPlaneStatus::class,
         ];
     }
 

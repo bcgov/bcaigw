@@ -144,7 +144,8 @@ bearer values.
 
 Administrators manage provider accounts, upstream targets, public model aliases,
 effective-dated pricing, and per-application grants at
-`/portal/admin/model-control`. Supported provider types are AWS Bedrock, Azure
+`/admin/model-control` (locally <http://localhost:8030/admin/model-control>).
+Supported provider types are AWS Bedrock, Azure
 AI Foundry, and OpenAI-compatible vLLM.
 
 Provider accounts should use workload identity or a platform secret reference.
@@ -324,3 +325,7 @@ configured.
 See `deploy/openshift/README.md` for layout and
 `docs/runbooks/openshift-deployment.md` for secret rotation, migrations,
 scaling, metrics, egress, backup/restore and rollback.
+
+
+Two notes to keep it OSS-only: don't set a Maxim API key or enable the Maxim log store, and keep config_store on SQLite (the provided config does both). 
+

@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Enums\ApplicationStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use LogicException;
@@ -23,8 +22,6 @@ final class ApplicationLifecycleHistory extends Model
     protected function casts(): array
     {
         return [
-            'from_status' => ApplicationStatus::class,
-            'to_status' => ApplicationStatus::class,
             'metadata' => 'array',
             'created_at' => 'immutable_datetime',
         ];

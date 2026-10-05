@@ -102,7 +102,139 @@ objects:
               env:
               - name: "ENV_ARG"
                 value: "hi there"
-
+              - name: BIFROST_BASE_URL
+                value: ${BIFROST_BASE_URL}
+  # ---- Bifrost AI gateway (OSS, Apache-2.0) ----
+  # BCAIGW forwards to this in-cluster service; Bifrost owns provider keys, routing,
+  # fallback and load balancing. No Maxim/enterprise key is set, so only OSS
+  # features run. Provider keys are supplied via the optional ${BIFROST_KEYS_SECRET}.
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: ${NAME}-bifrost-config
+      labels:
+        deployment: ${NAME}-bifrost
+    data:
+      config.json: |
+        {
+          "$schema": "https://www.getbifrost.ai/schema",
+          "client": { "drop_excess_requests": false },
+          "config_store": { "enabled": true, "type": "sqlite", "config": { "path": "/app/data/config.db" } }
+        }
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: ${NAME}-bifrost-data
+      labels:
+        deployment: ${NAME}-bifrost
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: ${BIFROST_STORAGE_SIZE}
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: ${NAME}-bifrost
+      labels:
+        deployment: ${NAME}-bifrost
+    spec:
+      ports:
+        - name: 8080-tcp
+          port: 8080
+          protocol: TCP
+          targetPort: 8080
+      selector:
+        deployment: ${NAME}-bifrost
+      sessionAffinity: None
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: ${NAME}-bifrost
+      labels:
+        deployment: ${NAME}-bifrost
+        app.kubernetes.io/part-of: ${LABEL_NAME}
+    spec:
+      replicas: 1
+      revisionHistoryLimit: 5
+      selector:
+        matchLabels:
+          deployment: ${NAME}-bifrost
+      strategy:
+        type: Recreate
+      template:
+        metadata:
+          labels:
+            deployment: ${NAME}-bifrost
+        spec:
+          volumes:
+            - name: bifrost-data
+              persistentVolumeClaim:
+                claimName: ${NAME}-bifrost-data
+            - name: bifrost-config
+              configMap:
+                name: ${NAME}-bifrost-config
+          containers:
+            - name: bifrost
+              image: ${BIFROST_IMAGE}
+              imagePullPolicy: IfNotPresent
+              args: ["-app-dir", "/app/data"]
+              ports:
+                - containerPort: 8080
+                  protocol: TCP
+              env:
+                - name: APP_HOST
+                  value: "0.0.0.0"
+                - name: APP_PORT
+                  value: "8080"
+                - name: LOG_STYLE
+                  value: "json"
+              envFrom:
+                - secretRef:
+                    name: ${BIFROST_KEYS_SECRET}
+                    optional: true
+              volumeMounts:
+                - name: bifrost-data
+                  mountPath: /app/data
+                - name: bifrost-config
+                  mountPath: /app/data/config.json
+                  subPath: config.json
+              resources:
+                requests:
+                  cpu: ${BIFROST_CPU_REQUESTS}
+                  memory: ${BIFROST_MEM_REQUESTS}
+                limits:
+                  cpu: ${BIFROST_CPU_LIMITS}
+                  memory: ${BIFROST_MEM_LIMITS}
+              readinessProbe:
+                tcpSocket:
+                  port: 8080
+                initialDelaySeconds: 10
+                periodSeconds: 15
+              livenessProbe:
+                tcpSocket:
+                  port: 8080
+                initialDelaySeconds: 30
+                periodSeconds: 20
+  - apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: ${NAME}-bifrost-allow-same-namespace
+      labels:
+        deployment: ${NAME}-bifrost
+    spec:
+      podSelector:
+        matchLabels:
+          deployment: ${NAME}-bifrost
+      ingress:
+        - from:
+            - podSelector: {}
+          ports:
+            - protocol: TCP
+              port: 8080
+      policyTypes:
+        - Ingress
   - kind: CronJob
     apiVersion: batch/v1
     metadata:
@@ -140,7 +272,7 @@ objects:
                     - >
                       date
 
-                      oc login --token=$(LOGIN_TOKEN) --server=https://api.gold.devops.gov.bc.ca:6443
+                      oc login --token=$(LOGIN_TOKEN) --server=https://api.silver.devops.gov.bc.ca:6443
 
                       oc version
 
@@ -159,7 +291,7 @@ objects:
   - apiVersion: route.openshift.io/v1
     kind: Route
     spec:
-      host: ${NAME}-${NAMESPACE}.apps.gold.devops.gov.bc.ca
+      host: ${NAME}-${NAMESPACE}.apps.silver.devops.gov.bc.ca
       port:
         targetPort: 8080-tcp
       to:
@@ -276,6 +408,33 @@ parameters:
   - name: BUILD_MEM_LIMITS
     required: false
   - name: NPM_ENV
+    required: false
+  - name: BIFROST_IMAGE
+    description: Bifrost OSS image (BC Gov artifactory pull-through of docker.io/maximhq/bifrost)
+    value: 'artifacts.developer.gov.bc.ca/docker-remote/maximhq/bifrost:v1.3.9'
+    required: false
+  - name: BIFROST_BASE_URL
+    description: In-cluster URL BCAIGW uses to reach Bifrost
+    value: 'http://bcaigw-bifrost:8080'
+    required: false
+  - name: BIFROST_STORAGE_SIZE
+    value: '1Gi'
+    required: false
+  - name: BIFROST_CPU_REQUESTS
+    value: '50m'
+    required: false
+  - name: BIFROST_CPU_LIMITS
+    value: '500m'
+    required: false
+  - name: BIFROST_MEM_REQUESTS
+    value: '256Mi'
+    required: false
+  - name: BIFROST_MEM_LIMITS
+    value: '1Gi'
+    required: false
+  - name: BIFROST_KEYS_SECRET
+    description: Optional Secret holding provider API keys as env vars for Bifrost
+    value: 'bcaigw-bifrost-provider-keys'
     required: false
   - name: 'JOB_NAME'
     displayName: 'Job Name'

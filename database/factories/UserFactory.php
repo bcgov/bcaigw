@@ -2,13 +2,12 @@
 
 namespace Database\Factories;
 
-use App\Enums\PortalRole;
-use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 /**
- * @extends Factory<User>
+ * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\User>
  */
 class UserFactory extends Factory
 {
@@ -19,29 +18,30 @@ class UserFactory extends Factory
      */
     public function definition(): array
     {
+        $firstName = fake()->firstName();
+        $lastName = fake()->lastName();
+
         return [
-            'keycloak_subject' => (string) Str::uuid(),
-            'idir_user_guid' => (string) Str::uuid(),
-            'idir_username' => Str::upper(fake()->unique()->userName()),
-            'name' => fake()->name(),
-            'first_name' => fake()->firstName(),
-            'last_name' => fake()->lastName(),
+            'guid' => Str::uuid()->getHex()->toString(),
+            'first_name' => $firstName,
+            'last_name' => $lastName,
+            'name' => $firstName.' '.$lastName,
+            'disabled' => false,
             'email' => fake()->unique()->safeEmail(),
-            'email_verified_at' => now(),
-            'password' => null,
-            'portal_role' => PortalRole::ApplicationOwner,
-            'last_login_at' => now(),
+            'password' => Hash::make('password'),
+            'idir_username' => strtoupper(Str::random(8)),
+            'idir_user_guid' => Str::uuid()->getHex()->toString(),
             'remember_token' => Str::random(10),
         ];
     }
 
     /**
-     * Indicate that the model's email address should be unverified.
+     * Indicate that the user is disabled.
      */
-    public function unverified(): static
+    public function disabled(): static
     {
-        return $this->state(fn (array $attributes) => [
-            'email_verified_at' => null,
+        return $this->state(fn (array $attributes): array => [
+            'disabled' => true,
         ]);
     }
 }

@@ -1,13 +1,9 @@
 <?php
 
-use App\Exceptions\GatewayException;
-use App\Http\Middleware\AssignGatewayRequestId;
-use App\Http\Middleware\AuditAuthorizationDenial;
-use App\Http\Middleware\AuthenticateMachineRequest;
 use App\Http\Middleware\HandleInertiaRequests;
-use App\Http\Middleware\LimitGatewayConcurrency;
-use App\Http\Middleware\RequireMachineScope;
-use App\Services\OpenAiError;
+use App\Http\Middleware\ResolveGatewayApplication;
+use App\Http\Middleware\SuperAdmin;
+use App\Http\Middleware\ValidateGatewayToken;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -17,12 +13,12 @@ use Illuminate\Support\Facades\Route;
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
-        api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
         then: function (): void {
-            Route::middleware('api')->group(base_path('routes/oauth.php'));
-            Route::middleware('api')->group(base_path('routes/gateway.php'));
+            Route::middleware(['gateway.jwt', 'gateway.app'])
+                ->prefix('api/gateway')
+                ->group(__DIR__.'/../routes/gateway.php');
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
@@ -47,14 +43,12 @@ return Application::configure(basePath: dirname(__DIR__))
                 | Request::HEADER_X_FORWARDED_PREFIX,
         );
 
-        $middleware->redirectGuestsTo(fn () => route('auth.idir.redirect'));
+        $middleware->redirectGuestsTo(fn () => route('login'));
 
         $middleware->alias([
-            'audit.authorization' => AuditAuthorizationDenial::class,
-            'gateway.request_id' => AssignGatewayRequestId::class,
-            'gateway.concurrency' => LimitGatewayConcurrency::class,
-            'machine.auth' => AuthenticateMachineRequest::class,
-            'machine.scope' => RequireMachineScope::class,
+            'superadmin' => SuperAdmin::class,
+            'gateway.jwt' => ValidateGatewayToken::class,
+            'gateway.app' => ResolveGatewayApplication::class,
         ]);
 
         $middleware->web(append: [
@@ -62,32 +56,5 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        $exceptions->render(function (GatewayException $exception, Request $request) {
-            if (! $request->is('v1/*')) {
-                return null;
-            }
-
-            return OpenAiError::response(
-                $exception->getMessage(),
-                $exception->errorType,
-                $exception->errorCode,
-                $exception->status,
-                $exception->parameter,
-                $request->attributes->get('bcaigw.request_id'),
-                $exception->headers,
-            );
-        });
-        $exceptions->render(function (Throwable $exception, Request $request) {
-            if (! $request->is('v1/*')) {
-                return null;
-            }
-
-            return OpenAiError::response(
-                'The gateway could not process the request.',
-                'server_error',
-                'internal_error',
-                500,
-                requestId: $request->attributes->get('bcaigw.request_id'),
-            );
-        });
+        //
     })->create();
