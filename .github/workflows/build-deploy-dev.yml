@@ -27,8 +27,8 @@ jobs:
       cancel-in-progress: true
     env:
       BUILD_ID: ${{ github.event.number }}
-      NAMESPACE: c19cc5-dev
-      BUILD_NAMESPACE: c19cc5-tools
+      NAMESPACE: caeb60-dev
+      BUILD_NAMESPACE: caeb60-tools
       BUILD_REF: ${{ github.base_ref }}
       HOST_PREFIX: bcaigw
       SOURCE_REPOSITORY_BRANCH: dev
@@ -74,8 +74,8 @@ jobs:
     #if: ${{ github.event.pull_request.merged == true && github.base_ref != 'prod' && github.base_ref != 'test'}}
     env:
       BUILD_ID: ${{ github.event.number }}
-      NAMESPACE: c19cc5-dev
-      BUILD_NAMESPACE: c19cc5-tools
+      NAMESPACE: caeb60-dev
+      BUILD_NAMESPACE: caeb60-tools
       BUILD_REF: ${{ github.base_ref }}
       HOST_PREFIX: bcaigw
       SOURCE_REPOSITORY_BRANCH: dev
