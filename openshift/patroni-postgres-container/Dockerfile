@@ -11,9 +11,9 @@ ARG PGHOME=/home/postgres
 
 # --- STEP 8: Purge and overwrite with clean HTTP mirrors (No HTTPS SSL handshakes) ---
 RUN rm -rf /etc/apt/sources.list.d/* \
-    && echo "deb http://debian.org bookworm main contrib non-free non-free-firmware" > /etc/apt/sources.list \
-    && echo "deb http://debian.org-security bookworm-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list \
-    && echo "deb http://debian.org bookworm-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list \
+    && echo "deb http://debian.org trixie main contrib non-free non-free-firmware" > /etc/apt/sources.list \
+    && echo "deb http://debian.org-security trixie-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list \
+    && echo "deb http://debian.org trixie-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list \
     && echo "deb http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list
 
 # --- STEP 9: Force system updates by disabling SSL verification checks ---
