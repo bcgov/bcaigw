@@ -11,11 +11,11 @@ echo "Setup TZ"
 php -r "date_default_timezone_set('${TZ}');"
 php -r "echo date_default_timezone_get();"
 
-if [ -f /vault/secrets/bcaigw-secrets.env ]; then
-    touch .env && cp -rf /vault/secrets/bcaigw-secrets.env /var/www/html/.env
+if [ -f /vault/secrets/secrets.env ]; then
+    touch .env && cp -rf /vault/secrets/secrets.env /var/www/html/.env
 fi
-if [ -f /vault/secrets/test-bcaigw-secrets.env ]; then
-    touch .env && cp -rf /vault/secrets/test-bcaigw-secrets.env /var/www/html/.env
+if [ -f /vault/secrets/test-secrets.env ]; then
+    touch .env && cp -rf /vault/secrets/test-secrets.env /var/www/html/.env
 fi
 echo "ENV_ARG: ${ENV_ARG}"
 
