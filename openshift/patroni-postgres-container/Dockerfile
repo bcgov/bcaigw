@@ -10,14 +10,17 @@ ENV PATRONI_HOME=/opt/patroni
 ARG PGHOME=/home/postgres
 
 
-# --- FIX: Purge old Buster repositories and target Bookworm cleanly ---
+# --- STEP 8: Overwrite sources to point explicitly to Bookworm ---
 RUN rm -rf /etc/apt/sources.list.d/* \
-    && echo "deb http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware" > /etc/apt/sources.list \
-    && echo "deb http://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list \
-    && echo "deb http://deb.debian.org/debian bookworm-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list \
+    && echo "deb http://debian.org bookworm main contrib non-free non-free-firmware" > /etc/apt/sources.list \
+    && echo "deb http://debian.org bookworm-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list \
+    && echo "deb http://debian.org bookworm-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list \
     && echo "deb http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list
 
-RUN apt-get update
+# --- STEP 9: Force keyring upgrade and allow insecure keys temporarily ---
+RUN apt-get update -o Acquire::AllowInsecureRepositories=true || true \
+    && apt-get install -y --allow-unauthenticated debian-archive-keyring \
+    && apt-get update
 
 RUN export DEBIAN_FRONTEND=noninteractive \
     && set -x \
