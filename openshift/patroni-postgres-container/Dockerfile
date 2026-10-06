@@ -1,4 +1,4 @@
-FROM postgres:16-bookworm
+FROM postgres:17-bookworm
 
 LABEL Khalid Alkatheeri <kal.marsh@gov.bc.ca>
 
@@ -9,16 +9,8 @@ ENV PATRONI_HOME=/opt/patroni
 
 ARG PGHOME=/home/postgres
 
-
 RUN export DEBIAN_FRONTEND=noninteractive \
     && set -x \
-    # Clear out any legacy configurations inherited by build environments
-    && rm -f /etc/apt/sources.list.d/* \
-    && echo "deb http://debian.org bookworm main contrib non-free non-free-firmware" > /etc/apt/sources.list \
-    && echo "deb http://debian.org bookworm-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list \
-    && echo "deb http://debian.org bookworm-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list \
-    && echo "deb http://postgresql.org bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
-    # Standard setup continues
     && echo 'APT::Install-Recommends "0";\nAPT::Install-Suggests "0";' > /etc/apt/apt.conf.d/01norecommend \
     && apt-get update -y \
     && apt-get install -y curl jq locales git build-essential libpq-dev python3 python3-dev python3-pip python3-wheel python3-setuptools python3-psycopg2 \
