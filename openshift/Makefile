@@ -14,6 +14,7 @@ export BACKUP_POSTGRESQL_APP_NAME := $(or $(BACKUP_POSTGRESQL_APP_NAME), bcaigw-
 export BACKUP_CONFIGMAP_NAME := $(or $(BACKUP_CONFIGMAP_NAME), bcaigw-patroni-backup-conf)
 export BIFROST_IMAGE_TAG := $(or $(BIFROST_IMAGE_TAG), v1.3.9)
 export BIFROST_SOURCE_IMAGE := $(or $(BIFROST_SOURCE_IMAGE), artifacts.developer.gov.bc.ca/docker-remote/maximhq/bifrost:v1.3.9)
+export OC_CLUSTER := $(or $(OC_CLUSTER), silver)
 
 ##if
 ifeq ($(GIT_LOCAL_BRANCH),dev)
