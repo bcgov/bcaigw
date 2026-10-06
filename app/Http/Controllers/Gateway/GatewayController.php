@@ -14,6 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use OpenApi\Attributes as OA;
 use Throwable;
 
 class GatewayController extends Controller
@@ -26,6 +27,12 @@ class GatewayController extends Controller
     /**
      * OpenAI-compatible list of the models this application may invoke.
      */
+    #[OA\Get(
+        path: '/v1/models',
+        summary: 'List the models this application may invoke.',
+        tags: ['Gateway'],
+        responses: [new OA\Response(response: 200, description: 'List of available models.')],
+    )]
     public function models(Request $request): JsonResponse
     {
         $application = $this->application($request);
@@ -50,6 +57,12 @@ class GatewayController extends Controller
      * OpenAI-compatible chat completion. Authorizes the call, forwards it to the
      * resolved upstream target, records telemetry, and returns the reply.
      */
+    #[OA\Post(
+        path: '/v1/chat/completions',
+        summary: 'Create an OpenAI-compatible chat completion.',
+        tags: ['Gateway'],
+        responses: [new OA\Response(response: 200, description: 'Chat completion result.')],
+    )]
     public function chatCompletions(Request $request): JsonResponse
     {
         $application = $this->application($request);
@@ -136,6 +149,12 @@ class GatewayController extends Controller
      * model's image_generation capability, forwards it to the resolved upstream
      * target and returns the generated image(s).
      */
+    #[OA\Post(
+        path: '/v1/images/generations',
+        summary: 'Create an OpenAI-compatible image generation.',
+        tags: ['Gateway'],
+        responses: [new OA\Response(response: 200, description: 'Generated image(s).')],
+    )]
     public function imageGenerations(Request $request): JsonResponse
     {
         $application = $this->application($request);
@@ -190,6 +209,12 @@ class GatewayController extends Controller
      * embeddings capability, forwards the input to the resolved upstream target
      * and returns the embedding vectors.
      */
+    #[OA\Post(
+        path: '/v1/embeddings',
+        summary: 'Create OpenAI-compatible embeddings.',
+        tags: ['Gateway'],
+        responses: [new OA\Response(response: 200, description: 'Embedding vectors.')],
+    )]
     public function embeddings(Request $request): JsonResponse
     {
         $application = $this->application($request);
@@ -247,6 +272,12 @@ class GatewayController extends Controller
      * dedicated rerank API (not chat/converse), so it is exposed on its own
      * endpoint and authorized against the model's rerank capability.
      */
+    #[OA\Post(
+        path: '/v1/rerank',
+        summary: 'Rerank documents against a query.',
+        tags: ['Gateway'],
+        responses: [new OA\Response(response: 200, description: 'Ranked documents.')],
+    )]
     public function rerank(Request $request): JsonResponse
     {
         $application = $this->application($request);
