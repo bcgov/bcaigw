@@ -44,7 +44,7 @@ objects:
             vault.hashicorp.com/agent-inject: 'true'
             vault.hashicorp.com/agent-inject-token: 'true'
             vault.hashicorp.com/agent-pre-populate-only: 'true'
-            vault.hashicorp.com/auth-path: auth/k8s-gold
+            vault.hashicorp.com/auth-path: auth/k8s-${OC_CLUSTER}
             vault.hashicorp.com/namespace: platform-services
             vault.hashicorp.com/role: ${LICENSE_PLATE}-${LICENSE_BRANCH}
             vault.hashicorp.com/agent-inject-secret-secrets.env: ${LICENSE_PLATE}-${LICENSE_BRANCH}/${VAULT_ENV}
@@ -168,6 +168,10 @@ objects:
           labels:
             deployment: ${NAME}-bifrost
         spec:
+          # OpenShift runs this pod with an arbitrary UID and GID 0; fsGroup makes
+          # the mounted PVC group-writable so Bifrost can write /app/data.
+          securityContext:
+            fsGroup: ${{OC_USER_ID}}
           volumes:
             - name: bifrost-data
               persistentVolumeClaim:
@@ -467,4 +471,7 @@ parameters:
     required: false
   - name: LOGIN_TOKEN_SECRET
     description: The secret having the login token
+    required: true
+  - name: OC_CLUSTER
+    description: The OpenShift cluster to use
     required: true
