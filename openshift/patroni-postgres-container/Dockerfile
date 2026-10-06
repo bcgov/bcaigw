@@ -9,6 +9,14 @@ ENV PATRONI_HOME=/opt/patroni
 
 ARG PGHOME=/home/postgres
 
+
+# --- FIX: Purge old Buster repositories and target Bookworm cleanly ---
+RUN rm -rf /etc/apt/sources.list.d/* \
+    && echo "deb http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware" > /etc/apt/sources.list \
+    && echo "deb http://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware" >> /etc/apt/sources.list \
+    && echo "deb http://deb.debian.org/debian bookworm-updates main contrib non-free non-free-firmware" >> /etc/apt/sources.list \
+    && echo "deb http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list
+
 RUN apt-get update
 
 RUN export DEBIAN_FRONTEND=noninteractive \
@@ -35,8 +43,7 @@ RUN export DEBIAN_FRONTEND=noninteractive \
     && apt-get remove -y git build-essential python3-dev \
     && apt-get autoremove -y \
     && apt-get clean -y \
-    && rm -rf /var/lib/apt/lists/* /root/.cache
-    
+    && rm -rf /var/lib/apt/lists/* /root/.cache    
 
 COPY contrib/root /
 
