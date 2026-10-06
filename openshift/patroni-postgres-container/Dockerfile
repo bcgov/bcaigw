@@ -1,5 +1,4 @@
-FROM postgres:16-bookworm
-
+FROM postgres:16.15-trixie
 LABEL Khalid Alkatheeri <kal.marsh@gov.bc.ca>
 
 ARG patroniv=3.3.0
