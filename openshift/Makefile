@@ -124,8 +124,10 @@ deploy-web:
 	test -n "$(NAMESPACE)"
 	test -n "$(BUILD_NAMESPACE)"
 	@echo "+\n++ Deploying Web into $(NAMESPACE)\n+"
+	@echo "+\n++ Deploying Web into $(NAMESPACE)\n+"
 	@oc -n $(NAMESPACE) process -f $(DEPLOY_FILE) --param-file=$(PARAM_FILE) | oc -n $(NAMESPACE) apply -f -
-	$(call rollout_and_wait,dc/$(HOST_PREFIX))
+	@oc -n $(NAMESPACE) rollout restart deployment/$(HOST_PREFIX)
+	$(call rollout_and_wait,deployment/$(HOST_PREFIX))
 	@echo "+\n++ FINISHED Deploying Web\n+"
 
 # Mirror the OSS Bifrost image into the tools namespace (OSS only, no Maxim/enterprise key).
