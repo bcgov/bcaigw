@@ -1,4 +1,4 @@
-FROM postgres:17-bookworm
+FROM postgres:16-bookworm
 
 LABEL Khalid Alkatheeri <kal.marsh@gov.bc.ca>
 
@@ -8,8 +8,6 @@ ENV LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
 ENV PATRONI_HOME=/opt/patroni
 
 ARG PGHOME=/home/postgres
-
-RUN echo "deb http://security.debian.org/debian-security bookworm-security main contrib non-free" > /etc/apt/sources.list
 
 RUN apt-get update
 
