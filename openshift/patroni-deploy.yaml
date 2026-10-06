@@ -176,12 +176,12 @@ objects:
                 storage: ${PVC_SIZE}
 parameters:
   - name: PATRONI_NAME
-    value: nrsts-patroni
+    value: bcaigw-patroni
   - name: LABEL_NAME
     required: true
     description: some desc for this component
   - name: PROJECT
-    value: nrsts
+    value: bcaigw
   - name: REPLICAS
     description: |
       The number of StatefulSet replicas to use.
@@ -215,7 +215,7 @@ parameters:
   - name: IMAGE_STREAM_TAG
     description: |
       Patroni ImageTag
-    value: nrsts-patroni:12.4-latest
+    value: bcaigw-patroni:12.4-latest
   - name: PVC_SIZE
     description:
       The size of the persistent volume to create.

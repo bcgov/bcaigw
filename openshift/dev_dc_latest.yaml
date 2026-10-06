@@ -448,7 +448,7 @@ parameters:
   - name: 'JOB_NAME'
     displayName: 'Job Name'
     description: 'Name of the Scheduled Job to Create.'
-    value: 'nrsts-daily-cronjob'
+    value: 'bcaigw-daily-cronjob'
     required: true
   - name: 'SCHEDULE'
     displayName: 'Cron Schedule'

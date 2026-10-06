@@ -68,7 +68,7 @@ parameters:
     required: true
   - name: SOURCE_REPOSITORY_URL
     required: true
-    value: https://github.com/bcgov/nrsts.git
+    value: https://github.com/bcgov/bcaigw.git
   - name: SOURCE_REPOSITORY_REF
     required: true
   - name: TAG
