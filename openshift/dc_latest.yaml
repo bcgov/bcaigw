@@ -459,7 +459,7 @@ parameters:
     required: false
   - name: BIFROST_IMAGE
     description: Bifrost OSS image (BC Gov artifactory pull-through of docker.io/maximhq/bifrost)
-    value: 'artifacts.developer.gov.bc.ca/docker-remote/maximhq/bifrost:v1.3.9'
+    value: 'artifacts.developer.gov.bc.ca/docker-remote/maximhq/bifrost:v2.1.1'
     required: false
   - name: BIFROST_BASE_URL
     description: In-cluster URL BCAIGW uses to reach Bifrost

@@ -12,8 +12,8 @@ export HOST_PREFIX := $(or $(HOST_PREFIX), bcaigw)
 export SOURCE_REPOSITORY_BRANCH := $(or $(SOURCE_REPOSITORY_BRANCH), dev)
 export BACKUP_POSTGRESQL_APP_NAME := $(or $(BACKUP_POSTGRESQL_APP_NAME), bcaigw-patroni-backup)
 export BACKUP_CONFIGMAP_NAME := $(or $(BACKUP_CONFIGMAP_NAME), bcaigw-patroni-backup-conf)
-export BIFROST_IMAGE_TAG := $(or $(BIFROST_IMAGE_TAG), v1.3.9)
-export BIFROST_SOURCE_IMAGE := $(or $(BIFROST_SOURCE_IMAGE), artifacts.developer.gov.bc.ca/docker-remote/maximhq/bifrost:v1.3.9)
+export BIFROST_IMAGE_TAG := $(or $(BIFROST_IMAGE_TAG), v2.1.1)
+export BIFROST_SOURCE_IMAGE := $(or $(BIFROST_SOURCE_IMAGE), artifacts.developer.gov.bc.ca/docker-remote/maximhq/bifrost:v2.1.1)
 export OC_CLUSTER := $(or $(OC_CLUSTER), silver)
 
 ##if
