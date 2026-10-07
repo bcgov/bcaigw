@@ -108,19 +108,19 @@ objects:
   # BCAIGW forwards to this in-cluster service; Bifrost owns provider keys, routing,
   # fallback and load balancing. No Maxim/enterprise key is set, so only OSS
   # features run. Provider keys are supplied via the optional ${BIFROST_KEYS_SECRET}.
-  - apiVersion: v1
-    kind: ConfigMap
-    metadata:
-      name: ${NAME}-bifrost-config
-      labels:
-        deployment: ${NAME}-bifrost
-    data:
-      config.json: |
-        {
-          "$schema": "https://www.getbifrost.ai/schema",
-          "client": { "drop_excess_requests": false },
-          "config_store": { "enabled": true, "type": "sqlite", "config": { "path": "/app/data/config.db" } }
-        }
+  # - apiVersion: v1
+  #   kind: ConfigMap
+  #   metadata:
+  #     name: ${NAME}-bifrost-config
+  #     labels:
+  #       deployment: ${NAME}-bifrost
+  #   data:
+  #     config.json: |
+  #       {
+  #         "$schema": "https://www.getbifrost.ai/schema",
+  #         "client": { "drop_excess_requests": false },
+  #         "config_store": { "enabled": true, "type": "sqlite", "config": { "path": "/app/data/config.db" } }
+  #       }
   - apiVersion: v1
     kind: PersistentVolumeClaim
     metadata:
