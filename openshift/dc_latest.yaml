@@ -148,6 +148,10 @@ objects:
           port: 8080
           protocol: TCP
           targetPort: 8080
+        - name: 8443-tcp
+          port: 8443
+          protocol: TCP
+          targetPort: 8443
       selector:
         deployment: ${NAME}-bifrost
       sessionAffinity: None
@@ -190,11 +194,15 @@ objects:
               ports:
                 - containerPort: 8080
                   protocol: TCP
+                - containerPort: 8443
+                  protocol: TCP
               env:
                 - name: APP_HOST
                   value: "0.0.0.0"
                 - name: APP_PORT
                   value: "8080"
+                - name: APP_SECURE_PORT
+                  value: "8443"
                 - name: LOG_STYLE
                   value: "json"
               envFrom:
@@ -244,6 +252,8 @@ objects:
               port: 80
             - protocol: TCP
               port: 443
+            - protocol: TCP
+              port: 8443
 
       policyTypes:
         - Ingress
