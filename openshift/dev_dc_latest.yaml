@@ -130,7 +130,7 @@ objects:
     spec:
       # Block storage honours fsGroup so OpenShift makes /app/data group-writable;
       # netapp-file (NFS) ignores fsGroup and leaves the volume root:root.
-      storageClassName: netapp-file-standard
+      storageClassName: netapp-block-standard
       accessModes:
         - ReadWriteOnce
       resources:
