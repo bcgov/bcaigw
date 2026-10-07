@@ -222,16 +222,16 @@ objects:
                 limits:
                   cpu: ${BIFROST_CPU_LIMITS}
                   memory: ${BIFROST_MEM_LIMITS}
-              readinessProbe:
-                tcpSocket:
-                  port: 8080
-                initialDelaySeconds: 10
-                periodSeconds: 15
-              livenessProbe:
-                tcpSocket:
-                  port: 8080
-                initialDelaySeconds: 30
-                periodSeconds: 20
+              # readinessProbe:
+              #   tcpSocket:
+              #     port: 8080
+              #   initialDelaySeconds: 10
+              #   periodSeconds: 15
+              # livenessProbe:
+              #   tcpSocket:
+              #     port: 8080
+              #   initialDelaySeconds: 30
+              #   periodSeconds: 20
   - apiVersion: networking.k8s.io/v1
     kind: NetworkPolicy
     metadata:
@@ -328,6 +328,27 @@ objects:
       name: ${NAME}
       labels:
         deployment: ${NAME}
+  - apiVersion: route.openshift.io/v1
+    kind: Route
+    spec:
+      host: ${NAME}-bifrost-${NAMESPACE}.apps.silver.devops.gov.bc.ca
+      port:
+        targetPort: 8080-tcp
+      to:
+        kind: Service
+        name: ${NAME}-bifrost
+        weight: 100
+      wildcardPolicy: None
+      tls:
+        termination: edge
+        insecureEdgeTerminationPolicy: Redirect
+    metadata:
+      name: ${NAME}-bifrost
+      labels:
+        deployment: ${NAME}-bifrost
+      annotations:
+        haproxy.router.openshift.io/ip_whitelist: 142.22.0.0/12 142.32.0.0/12 142.35.0.0/12
+
   - apiVersion: autoscaling.k8s.io/v1
     kind: VerticalPodAutoscaler
     metadata:
