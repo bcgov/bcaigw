@@ -190,19 +190,24 @@ objects:
             - name: bifrost
               image: ${BIFROST_IMAGE}
               imagePullPolicy: IfNotPresent
-              args: ["-app-dir", "/app/data"]
+              # No args: the image entrypoint's parse_args infinite-loops on any
+              # non --port/--host arg (e.g. -app-dir). It reads these from env instead.
               ports:
                 - containerPort: 8080
                   protocol: TCP
                 - containerPort: 8443
                   protocol: TCP
               env:
+                - name: APP_DIR
+                  value: "/app/data"
                 - name: APP_HOST
                   value: "0.0.0.0"
                 - name: APP_PORT
                   value: "8080"
                 - name: APP_SECURE_PORT
                   value: "8443"
+                - name: LOG_LEVEL
+                  value: "info"
                 - name: LOG_STYLE
                   value: "json"
               envFrom:
