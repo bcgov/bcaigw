@@ -116,6 +116,8 @@ class ModelControlController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'base_url' => ['required', 'string', 'max:2048'],
             'provider_model_identifier' => ['required', 'string', 'max:512'],
+            'bifrost_key_id' => ['nullable', 'string', 'max:255'],
+            'bifrost_key_name' => ['nullable', 'string', 'max:255'],
             'capabilities' => ['required', 'array', 'min:1'],
             'capabilities.*' => ['string', 'max:50'],
             'context_window' => ['required', 'integer', 'min:1'],
@@ -880,6 +882,8 @@ class ModelControlController extends Controller
     {
         $data = $request->validate([
             'model_id' => ['required', 'string', 'max:512'],
+            'bifrost_key_id' => ['nullable', 'string', 'max:255'],
+            'bifrost_key_name' => ['nullable', 'string', 'max:255'],
             'name' => ['nullable', 'string', 'max:255'],
             'input_cost' => ['required', 'numeric', 'min:0', 'max:100000'],
             'output_cost' => ['required', 'numeric', 'min:0', 'max:100000'],
@@ -920,6 +924,8 @@ class ModelControlController extends Controller
                 'region' => $provider->region,
                 'base_url' => '', // Blank routes through the shared Bifrost base URL.
                 'provider_model_identifier' => $data['model_id'],
+                'bifrost_key_id' => $data['bifrost_key_id'] ?? null,
+                'bifrost_key_name' => $data['bifrost_key_name'] ?? null,
                 'capabilities' => $capabilities,
                 'context_window' => $contextWindow,
                 'max_input_tokens' => $contextWindow,
@@ -1035,6 +1041,7 @@ class ModelControlController extends Controller
         $base = [
             'target_name' => $target->name,
             'model_identifier' => $target->provider_model_identifier,
+            'bifrost_key' => $target->bifrost_key_name ?: $target->bifrost_key_id,
             'provider_type' => $target->provider?->type,
             'endpoint' => $target->base_url,
             'request' => ['messages' => [['role' => 'user', 'content' => $prompt]], 'options' => $requestPreview],
@@ -1145,6 +1152,8 @@ class ModelControlController extends Controller
                     'environment' => $target->environment,
                     'base_url' => $target->base_url,
                     'provider_model_identifier' => $target->provider_model_identifier,
+                    'bifrost_key_id' => $target->bifrost_key_id,
+                    'bifrost_key_name' => $target->bifrost_key_name,
                     'capabilities' => $target->capabilities,
                     'context_window' => $target->context_window,
                     'max_input_tokens' => $target->max_input_tokens,

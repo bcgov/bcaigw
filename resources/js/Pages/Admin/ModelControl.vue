@@ -115,6 +115,18 @@ const syncSelectedKey = () => {
 
 watch(selectedProvider, syncSelectedKey);
 
+// The key (account) a newly added model is pinned to, sent as x-bf-api-key-id at call time.
+const selectedKeyPayload = () => {
+    const key = providerKeys.value.find((k) => k.id === selectedKey.value);
+    return { bifrost_key_id: key?.id ?? null, bifrost_key_name: key?.name ?? null };
+};
+
+// Keys of the provider named by a target's "provider/model" identifier.
+const keysForIdentifier = (identifier) => {
+    const provider = String(identifier ?? '').split('/')[0];
+    return bifrostProviders.value.find((p) => p.name === provider)?.keys ?? [];
+};
+
 const loadBifrostProviders = async () => {
     loadingProviders.value = true;
     discoverError.value = '';
@@ -183,6 +195,7 @@ const addModel = async (model) => {
     try {
         await axios.post('/admin/model-control/models', {
             model_id: model.id,
+            ...selectedKeyPayload(),
             name: model.name ?? null,
             input_cost: model.input_cost,
             output_cost: model.output_cost,
@@ -220,6 +233,7 @@ const addManual = async () => {
     try {
         await axios.post('/admin/model-control/models', {
             model_id: id,
+            ...selectedKeyPayload(),
             name: manual.value.name?.trim() || null,
             input_cost: manual.value.input_cost,
             output_cost: manual.value.output_cost,
@@ -312,7 +326,7 @@ const CAPABILITIES = ['chat', 'structured_output', 'tool_use', 'embeddings'];
 // Upstream targets
 const editingTarget = ref(null);
 const targetForm = useForm({
-    name: '', base_url: '', provider_model_identifier: '', capabilities: [],
+    name: '', base_url: '', provider_model_identifier: '', bifrost_key_id: '', bifrost_key_name: '', capabilities: [],
     context_window: 0, max_input_tokens: 0, max_output_tokens: 0, timeout_seconds: 60, status: 'active',
     input_cost: '', output_cost: '', cached_input_cost: '',
 });
@@ -322,6 +336,8 @@ const openTargetEdit = (t) => {
     targetForm.name = t.name;
     targetForm.base_url = t.base_url;
     targetForm.provider_model_identifier = t.provider_model_identifier;
+    targetForm.bifrost_key_id = t.bifrost_key_id ?? '';
+    targetForm.bifrost_key_name = t.bifrost_key_name ?? '';
     targetForm.capabilities = [...(t.capabilities ?? [])];
     targetForm.context_window = t.context_window;
     targetForm.max_input_tokens = t.max_input_tokens;
@@ -598,6 +614,7 @@ const statusBadgeClass = (status) => (status === 'active' ? 'text-bg-success' : 
                                 <th scope="col">Name</th>
                                 <th scope="col">Provider</th>
                                 <th scope="col">Model identifier</th>
+                                <th scope="col">Key (account)</th>
                                 <th scope="col">Capabilities</th>
                                 <th scope="col">Health</th>
                                 <th scope="col">Status</th>
@@ -606,11 +623,15 @@ const statusBadgeClass = (status) => (status === 'active' ? 'text-bg-success' : 
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-if="targets.length === 0"><td colspan="8" class="text-secondary py-3">None.</td></tr>
+                            <tr v-if="targets.length === 0"><td colspan="9" class="text-secondary py-3">None.</td></tr>
                             <tr v-for="t in targets" :key="t.public_id">
                                 <td class="fw-semibold">{{ t.name }}</td>
                                 <td>{{ t.provider_name }}</td>
                                 <td>{{ t.provider_model_identifier }}</td>
+                                <td>
+                                    <span v-if="t.bifrost_key_id" :title="t.bifrost_key_id">{{ t.bifrost_key_name || t.bifrost_key_id }}</span>
+                                    <span v-else class="text-secondary" title="Bifrost picks any enabled key whose allow-list covers the model">any</span>
+                                </td>
                                 <td>
                                     <span v-for="cap in (t.capabilities ?? [])" :key="cap" class="badge text-bg-light text-dark border me-1">{{ cap }}</span>
                                     <span v-if="!(t.capabilities ?? []).length" class="text-secondary">—</span>
@@ -781,6 +802,7 @@ const statusBadgeClass = (status) => (status === 'active' ? 'text-bg-success' : 
                                     tokens in {{ testOutput.usage.input_tokens }} / out {{ testOutput.usage.output_tokens }} / total {{ testOutput.usage.total_tokens }}
                                 </span>
                                 <span v-if="testOutput.provider_type" class="badge text-bg-info">{{ testOutput.provider_type }}</span>
+                                <span v-if="testOutput.bifrost_key" class="badge text-bg-light text-dark border">key {{ testOutput.bifrost_key }}</span>
                                 <span class="text-secondary small ms-auto font-monospace">{{ testOutput.model_identifier }}</span>
                             </div>
 
@@ -833,6 +855,24 @@ const statusBadgeClass = (status) => (status === 'active' ? 'text-bg-success' : 
                                 <label class="form-label">Model identifier</label>
                                 <input v-model="targetForm.provider_model_identifier" type="text" class="form-control font-monospace" :class="{ 'is-invalid': targetForm.errors.provider_model_identifier }" />
                                 <div class="invalid-feedback">{{ targetForm.errors.provider_model_identifier }}</div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Key (account)</label>
+                                <select
+                                    v-model="targetForm.bifrost_key_id"
+                                    class="form-select"
+                                    @change="targetForm.bifrost_key_name = keysForIdentifier(targetForm.provider_model_identifier).find((k) => k.id === targetForm.bifrost_key_id)?.name ?? ''"
+                                >
+                                    <option value="">Any enabled key (Bifrost load-balances)</option>
+                                    <option v-for="k in keysForIdentifier(targetForm.provider_model_identifier)" :key="k.id" :value="k.id">
+                                        {{ k.name || k.id }}{{ k.enabled ? '' : ' (disabled)' }}
+                                    </option>
+                                    <option
+                                        v-if="targetForm.bifrost_key_id && !keysForIdentifier(targetForm.provider_model_identifier).some((k) => k.id === targetForm.bifrost_key_id)"
+                                        :value="targetForm.bifrost_key_id"
+                                    >{{ targetForm.bifrost_key_name || targetForm.bifrost_key_id }} (not found on Bifrost)</option>
+                                </select>
+                                <div class="form-text">Sent to Bifrost as <code>x-bf-api-key-id</code> so calls use this account.</div>
                             </div>
                             <div class="col-12">
                                 <label class="form-label">Base URL</label>
