@@ -425,7 +425,7 @@ const statusBadgeClass = (status) => (status === 'active' ? 'text-bg-success' : 
                     <select v-model="selectedProvider" class="form-select form-select-sm" style="min-width: 14rem;" :disabled="loadingProviders || bifrostProviders.length === 0">
                         <option v-if="bifrostProviders.length === 0" value="">No providers enabled on Bifrost</option>
                         <option v-for="p in bifrostProviders" :key="p.name" :value="p.name">
-                            {{ p.name }} · {{ p.keys > 0 ? `${p.keys} key${p.keys === 1 ? '' : 's'}` : 'no keys' }}
+                            {{ p.name }}{{ p.type && p.type !== p.name ? ` (${p.type})` : '' }} · {{ p.keys > 0 ? `${p.keys} key${p.keys === 1 ? '' : 's'}` : 'no keys' }}
                         </option>
                     </select>
                     <button type="button" class="btn btn-outline-secondary btn-sm" :disabled="loadingProviders" @click="loadBifrostProviders">

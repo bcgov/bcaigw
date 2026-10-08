@@ -21,20 +21,12 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 use Throwable;
 
 class ModelControlController extends Controller
 {
-    /** Provider identifiers Bifrost understands, used to validate the discovery filter. */
-    private const BIFROST_PROVIDERS = [
-        'openai', 'anthropic', 'bedrock', 'gemini', 'vertex', 'cohere', 'azure',
-        'groq', 'mistral', 'deepseek', 'xai', 'ollama', 'vllm', 'fireworks',
-        'openrouter', 'perplexity', 'cerebras', 'huggingface', 'nebius',
-    ];
-
     public function __construct(
         private readonly ChatForwarderManager $forwarder,
         private readonly BedrockModelCards $modelCards,
@@ -318,9 +310,14 @@ class ModelControlController extends Controller
         $providers = collect($response->json('providers', []))
             ->map(function (array $p) {
                 $keys = is_array($p['keys'] ?? null) ? count($p['keys']) : 0;
+                $name = (string) ($p['name'] ?? '');
+                // A second account under the same vendor is a Bifrost custom provider
+                // with its own name and a base_provider_type (e.g. ca-east -> azure).
+                $baseType = $p['custom_provider_config']['base_provider_type'] ?? null;
 
                 return [
-                    'name' => $p['name'] ?? '',
+                    'name' => $name,
+                    'type' => is_string($baseType) && $baseType !== '' ? $baseType : $name,
                     'keys' => $keys,
                     'status' => $keys > 0 ? 'configured' : 'no keys',
                 ];
@@ -340,57 +337,67 @@ class ModelControlController extends Controller
     public function discoverModels(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'provider' => ['required', 'string', Rule::in(self::BIFROST_PROVIDERS)],
+            // A Bifrost provider name: a built-in vendor (azure, bedrock, openai)
+            // or a custom provider instance (e.g. ca-central, ca-east).
+            'provider' => ['required', 'string', 'max:255', 'regex:/^[A-Za-z0-9][A-Za-z0-9._-]*$/'],
         ]);
 
-        // Preferred path: Bifrost's management model catalog (GET /api/models).
-        // Present on newer Bifrost builds; older versions (e.g. v1.3.9) serve the
-        // dashboard SPA here, in which case $catalog is null and we fall back to
-        // reading the provider key allowlist below.
-        $catalog = $this->discoverFromCatalog($data['provider']);
+        $providerName = $data['provider'];
+
+        // Fetch the provider once: confirms it exists on Bifrost, exposes its key
+        // allowlist for the fallback path, and resolves its base type so a custom
+        // instance (ca-east) still gets vendor-specific handling (bedrock, pricing).
+        try {
+            $providerResponse = $this->bifrostRequest()
+                ->timeout(20)
+                ->get($this->bifrostBaseUrl().'/api/providers/'.$providerName);
+        } catch (Throwable $e) {
+            return response()->json(['error' => 'Could not reach Bifrost: '.$e->getMessage()], 502);
+        }
+
+        if ($providerResponse->status() === 404) {
+            return response()->json(['error' => "Provider '{$providerName}' is not configured on Bifrost."], 404);
+        }
+
+        if (! $providerResponse->successful()) {
+            return response()->json(['error' => 'Bifrost returned HTTP '.$providerResponse->status().': '.$providerResponse->body()], 502);
+        }
+
+        $baseType = $providerResponse->json('custom_provider_config.base_provider_type');
+        $baseType = is_string($baseType) && $baseType !== '' ? $baseType : $providerName;
+
+        $pricing = $this->bifrostPricing();
+        $existing = UpstreamTarget::query()->pluck('provider_model_identifier')->all();
+
+        // Preferred path: Bifrost's management model catalog (GET /api/models),
+        // scoped to this provider. Older builds (e.g. v1.3.9) serve the dashboard
+        // SPA here, in which case $catalog is null and we fall back to the
+        // provider's own key allowlist below.
+        $catalog = $this->discoverFromCatalog($providerName, $baseType);
 
         if ($catalog !== null) {
-            $existing = UpstreamTarget::query()->pluck('provider_model_identifier')->all();
-            $pricing = $this->bifrostPricing();
-
             $models = collect($catalog)
-                ->map(fn (string $model) => $this->mapBifrostModel($model, $data['provider'], $pricing))
+                ->map(fn (string $model) => $this->mapBifrostModel($model, $providerName, $baseType, $pricing))
                 ->reject(fn (array $m) => in_array($m['id'], $existing, true))
                 ->sortBy('id')
                 ->values()
                 ->all();
 
-            if ($data['provider'] === 'bedrock') {
-                $models = $this->enrichBedrockWithCards($models);
+            if ($baseType === 'bedrock') {
+                $models = $this->enrichBedrockWithCards($models, $providerName);
             }
 
             return response()->json(['models' => $models, 'allowlist_open' => false]);
         }
 
-        try {
-            $response = $this->bifrostRequest()
-                ->timeout(20)
-                ->get($this->bifrostBaseUrl().'/api/providers/'.$data['provider']);
-        } catch (Throwable $e) {
-            return response()->json(['error' => 'Could not reach Bifrost: '.$e->getMessage()], 502);
-        }
-
-        if ($response->status() === 404) {
-            return response()->json(['models' => [], 'allowlist_open' => false]);
-        }
-
-        if (! $response->successful()) {
-            return response()->json(['error' => 'Bifrost returned HTTP '.$response->status().': '.$response->body()], 502);
-        }
-
         // Fallback for Bifrost builds without /api/models: the discoverable models
-        // are the explicit allowlist on the provider's keys. A key with an empty
+        // are the explicit allowlist on this provider's keys. A key with an empty
         // list or a '*' entry serves everything, which cannot be enumerated
         // (allowlist_open).
         $allowlistOpen = false;
         $ids = [];
 
-        foreach ((array) $response->json('keys', []) as $key) {
+        foreach ((array) $providerResponse->json('keys', []) as $key) {
             $models = (array) ($key['models'] ?? []);
 
             if ($models === [] || in_array('*', $models, true)) {
@@ -406,37 +413,34 @@ class ModelControlController extends Controller
             }
         }
 
-        $existing = UpstreamTarget::query()->pluck('provider_model_identifier')->all();
-        $pricing = $this->bifrostPricing();
-
         $models = collect(array_unique($ids))
-            ->map(fn (string $model) => $this->mapBifrostModel($model, $data['provider'], $pricing))
+            ->map(fn (string $model) => $this->mapBifrostModel($model, $providerName, $baseType, $pricing))
             ->reject(fn (array $m) => in_array($m['id'], $existing, true))
             ->sortBy('id')
             ->values()
             ->all();
 
-        if ($data['provider'] === 'bedrock') {
-            $models = $this->enrichBedrockWithCards($models);
+        if ($baseType === 'bedrock') {
+            $models = $this->enrichBedrockWithCards($models, $providerName);
         }
 
         return response()->json(['models' => $models, 'allowlist_open' => $allowlistOpen]);
     }
 
     /**
-     * Query Bifrost's management model catalog (GET /api/models) for a provider.
-     * Returns the list of model ids, or null when the endpoint is unavailable
-     * (older Bifrost builds answer this route with the dashboard SPA).
+     * Query Bifrost's management model catalog (GET /api/models) for a provider
+     * instance (by name). Returns the list of model ids, or null when the
+     * endpoint is unavailable (older Bifrost builds answer with the dashboard SPA).
      *
      * @return list<string>|null
      */
-    private function discoverFromCatalog(string $provider): ?array
+    private function discoverFromCatalog(string $providerName, string $baseType): ?array
     {
         try {
             $response = $this->bifrostRequest()
                 ->timeout(20)
                 ->get($this->bifrostBaseUrl().'/api/models', [
-                    'provider' => $provider,
+                    'provider' => $providerName,
                     'limit' => 1000,
                     'unfiltered' => 'true',
                 ]);
@@ -456,23 +460,24 @@ class ModelControlController extends Controller
 
         foreach ($response->json('models', []) as $model) {
             $name = is_array($model) ? ($model['name'] ?? null) : (is_string($model) ? $model : null);
-            $modelProvider = is_array($model) ? ($model['provider'] ?? $provider) : $provider;
+            $modelProvider = is_array($model) ? ($model['provider'] ?? $providerName) : $providerName;
 
-            if (! is_string($name) || $name === '' || $modelProvider !== $provider) {
+            if (! is_string($name) || $name === '' || $modelProvider !== $providerName) {
                 continue;
             }
 
             // Catalog names are bare (no provider prefix) but may contain slashes
-            // themselves; qualify every id as "provider/name" for unified routing.
-            $ids[] = str_starts_with($name, $provider.'/') ? $name : $provider.'/'.$name;
+            // themselves; qualify every id as "provider/name" so the gateway routes
+            // to this specific provider instance.
+            $ids[] = str_starts_with($name, $providerName.'/') ? $name : $providerName.'/'.$name;
         }
 
         $ids = array_values(array_unique($ids));
 
         // Bedrock's catalog lists every region/commitment SKU; keep only models
         // this account can actually invoke (on-demand, global, or in-region).
-        if ($provider === 'bedrock') {
-            $ids = $this->filterBedrockInvokable($ids);
+        if ($baseType === 'bedrock') {
+            $ids = $this->filterBedrockInvokable($ids, $providerName);
         }
 
         return $ids;
@@ -489,13 +494,14 @@ class ModelControlController extends Controller
      * @param  list<string>  $ids
      * @return list<string>
      */
-    private function filterBedrockInvokable(array $ids): array
+    private function filterBedrockInvokable(array $ids, string $providerName): array
     {
         $region = (string) config('services.bifrost.bedrock_region', 'ca-central-1');
         $localGeo = $this->bedrockRegionGeo($region);
+        $prefix = $providerName.'/';
 
-        return array_values(array_filter($ids, function (string $id) use ($localGeo): bool {
-            $name = Str::lower(Str::after($id, 'bedrock/'));
+        return array_values(array_filter($ids, function (string $id) use ($localGeo, $prefix): bool {
+            $name = Str::lower(Str::startsWith($id, $prefix) ? Str::after($id, $prefix) : $id);
 
             // Commitment / provisioned-throughput SKUs are not on-demand invokable.
             if (Str::contains($name, 'commitment')) {
@@ -533,15 +539,16 @@ class ModelControlController extends Controller
      * @param  array<int, array<string, mixed>>  $models
      * @return array<int, array<string, mixed>>
      */
-    private function enrichBedrockWithCards(array $models): array
+    private function enrichBedrockWithCards(array $models, string $providerName): array
     {
         $region = (string) config('services.bifrost.bedrock_region', 'ca-central-1');
+        $prefix = $providerName.'/';
 
         // Only bare on-demand ids need a card lookup (global/region-pinned ids
         // are already authoritative). Map full id => provider-stripped bare id.
         $toCheck = [];
         foreach ($models as $m) {
-            $bare = (string) preg_replace('#^bedrock/#', '', (string) $m['id']);
+            $bare = Str::startsWith((string) $m['id'], $prefix) ? Str::after((string) $m['id'], $prefix) : (string) $m['id'];
             $token = preg_split('#[./]#', Str::lower($bare), 2)[0] ?? '';
             if ($token !== 'global' && ! $this->isBedrockRegionScope($token)) {
                 $toCheck[$m['id']] = $bare;
@@ -607,11 +614,11 @@ class ModelControlController extends Controller
      * @param  array<string, array<string, mixed>>  $pricing
      * @return array<string, mixed>
      */
-    private function mapBifrostModel(string $modelId, string $provider, array $pricing = []): array
+    private function mapBifrostModel(string $modelId, string $providerName, string $baseType, array $pricing = []): array
     {
-        $id = str_contains($modelId, '/') ? $modelId : $provider.'/'.$modelId;
+        $id = str_contains($modelId, '/') ? $modelId : $providerName.'/'.$modelId;
 
-        $entry = $this->lookupPricing($id, $provider, $pricing);
+        $entry = $this->lookupPricing($id, $baseType, $pricing);
 
         $inputPerToken = $entry['input_cost_per_token'] ?? null;
         $outputPerToken = $entry['output_cost_per_token'] ?? null;
@@ -635,16 +642,21 @@ class ModelControlController extends Controller
      * @param  array<string, array<string, mixed>>  $pricing
      * @return array<string, mixed>
      */
-    private function lookupPricing(string $id, string $provider, array $pricing): array
+    private function lookupPricing(string $id, string $baseType, array $pricing): array
     {
         if ($pricing === []) {
             return [];
         }
 
+        // The datasheet is keyed by canonical vendor type, so also try the bare
+        // model and the base-type-prefixed form (a custom instance like
+        // ca-east/gpt-4o still resolves to azure/gpt-4o pricing).
+        $bare = Str::afterLast($id, '/');
+
         $candidates = [
             $id,
-            str_starts_with($id, $provider.'/') ? Str::after($id, $provider.'/') : $id,
-            Str::afterLast($id, '/'),
+            $bare,
+            $baseType.'/'.$bare,
         ];
 
         foreach ($candidates as $candidate) {
