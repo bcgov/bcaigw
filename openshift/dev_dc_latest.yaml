@@ -175,6 +175,14 @@ objects:
           labels:
             deployment: ${NAME}-bifrost
         spec:
+          # Resolve the public Azure Foundry hostname to its PrivateLink IP inside
+          # the pod (the /etc/hosts equivalent of curl --resolve). Lets Bifrost use
+          # the public hostname so the *.services.ai.azure.com cert verifies while
+          # the connection still lands on the private endpoint.
+          hostAliases:
+            - ip: ${FOUNDRY_PRIVATE_IP}
+              hostnames:
+                - ${FOUNDRY_HOSTNAME}
           # OpenShift runs this pod with an arbitrary UID and GID 0; fsGroup makes
           # the mounted PVC group-writable so Bifrost can write /app/data.
           securityContext:
@@ -482,6 +490,14 @@ parameters:
   - name: BIFROST_KEYS_SECRET
     description: Optional Secret holding provider API keys as env vars for Bifrost
     value: 'bcaigw-bifrost-provider-keys'
+    required: false
+  - name: FOUNDRY_HOSTNAME
+    description: Public Azure Foundry hostname (matches the *.services.ai.azure.com cert); pinned to the PrivateLink IP via hostAliases
+    value: 'bcaigw-foundry-ca-central.services.ai.azure.com'
+    required: false
+  - name: FOUNDRY_PRIVATE_IP
+    description: Private endpoint IP for the Azure Foundry hostname
+    value: '10.46.129.6'
     required: false
   - name: 'JOB_NAME'
     displayName: 'Job Name'
