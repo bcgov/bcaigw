@@ -3,6 +3,7 @@
 namespace App\Services\Gateway\Forwarders;
 
 use App\Models\UpstreamTarget;
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use Throwable;
 
@@ -38,6 +39,25 @@ class BifrostChatForwarder extends AbstractChatForwarder
     public function supports(string $providerType): bool
     {
         return $providerType === 'bifrost';
+    }
+
+    /**
+     * Applies Bifrost auth. Bifrost v2 gates the dashboard, admin API and (unless
+     * disabled on the gateway) inference behind dashboard auth, which accepts HTTP
+     * Basic with the admin user/pass. Falls back to a bearer key, else no auth (OSS v1).
+     */
+    private function applyAuth(PendingRequest $request): PendingRequest
+    {
+        $username = (string) config('services.bifrost.admin_username');
+        $password = (string) config('services.bifrost.admin_password');
+
+        if ($username !== '' && $password !== '') {
+            return $request->withBasicAuth($username, $password);
+        }
+
+        $apiKey = (string) config('services.bifrost.api_key');
+
+        return $apiKey !== '' ? $request->withToken($apiKey) : $request;
     }
 
     /**
@@ -164,13 +184,7 @@ class BifrostChatForwarder extends AbstractChatForwarder
         $startedAt = microtime(true);
 
         try {
-            $request = Http::acceptJson()->timeout($target->timeout_seconds ?: 60);
-
-            // Bifrost OSS runs without gateway auth by default; send a bearer only if configured.
-            $apiKey = (string) config('services.bifrost.api_key');
-            if ($apiKey !== '') {
-                $request = $request->withToken($apiKey);
-            }
+            $request = $this->applyAuth(Http::acceptJson()->timeout($target->timeout_seconds ?: 60));
 
             $response = $request->post($endpoint, $body);
             $latencyMs = $this->elapsed($startedAt);
@@ -229,12 +243,7 @@ class BifrostChatForwarder extends AbstractChatForwarder
         $startedAt = microtime(true);
 
         try {
-            $request = Http::acceptJson()->timeout($target->timeout_seconds ?: 120);
-
-            $apiKey = (string) config('services.bifrost.api_key');
-            if ($apiKey !== '') {
-                $request = $request->withToken($apiKey);
-            }
+            $request = $this->applyAuth(Http::acceptJson()->timeout($target->timeout_seconds ?: 120));
 
             $response = $request->post($endpoint, $body);
             $latencyMs = $this->elapsed($startedAt);
@@ -308,12 +317,7 @@ class BifrostChatForwarder extends AbstractChatForwarder
         $startedAt = microtime(true);
 
         try {
-            $request = Http::acceptJson()->timeout($target->timeout_seconds ?: 60);
-
-            $apiKey = (string) config('services.bifrost.api_key');
-            if ($apiKey !== '') {
-                $request = $request->withToken($apiKey);
-            }
+            $request = $this->applyAuth(Http::acceptJson()->timeout($target->timeout_seconds ?: 60));
 
             $response = $request->post($endpoint.'/v1/embeddings', $body);
             $latencyMs = $this->elapsed($startedAt);
@@ -386,12 +390,7 @@ class BifrostChatForwarder extends AbstractChatForwarder
         $startedAt = microtime(true);
 
         try {
-            $request = Http::acceptJson()->timeout($target->timeout_seconds ?: 60);
-
-            $apiKey = (string) config('services.bifrost.api_key');
-            if ($apiKey !== '') {
-                $request = $request->withToken($apiKey);
-            }
+            $request = $this->applyAuth(Http::acceptJson()->timeout($target->timeout_seconds ?: 60));
 
             $response = $request->post($endpoint.'/v1/rerank', $body);
             $latencyMs = $this->elapsed($startedAt);

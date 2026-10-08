@@ -715,10 +715,17 @@ class ModelControlController extends Controller
         return rtrim((string) config('services.bifrost.base_url'), '/');
     }
 
-    /** A pending HTTP request to Bifrost, carrying the management bearer token when configured. */
+    /** A pending HTTP request to Bifrost, carrying admin Basic auth (v2) or a bearer token when configured. */
     private function bifrostRequest(): PendingRequest
     {
         $request = Http::acceptJson();
+        $username = (string) config('services.bifrost.admin_username');
+        $password = (string) config('services.bifrost.admin_password');
+
+        if ($username !== '' && $password !== '') {
+            return $request->withBasicAuth($username, $password);
+        }
+
         $apiKey = config('services.bifrost.api_key');
 
         return ! empty($apiKey) ? $request->withToken($apiKey) : $request;

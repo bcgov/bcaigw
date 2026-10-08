@@ -95,6 +95,10 @@ return [
     'bifrost' => [
         'base_url' => env('BIFROST_BASE_URL', 'http://bifrost:8080'),
         'api_key' => env('BIFROST_API_KEY'),
+        // Bifrost v2 dashboard auth: admin Basic-auth credentials used for the
+        // admin API (and inference, unless disabled on the gateway).
+        'admin_username' => env('BIFROST_ADMIN_USERNAME'),
+        'admin_password' => env('BIFROST_ADMIN_PASSWORD'),
         // AWS region backing Bifrost's 'bedrock' provider. Used to filter the
         // model catalog to invokable profiles (on-demand, global, in-region).
         'bedrock_region' => env('BIFROST_BEDROCK_REGION', 'ca-central-1'),
