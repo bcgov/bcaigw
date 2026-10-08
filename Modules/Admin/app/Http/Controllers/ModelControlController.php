@@ -114,7 +114,7 @@ class ModelControlController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'base_url' => ['required', 'string', 'max:2048'],
+            'base_url' => ['nullable', 'string', 'max:2048'],
             'provider_model_identifier' => ['required', 'string', 'max:512'],
             'bifrost_key_id' => ['nullable', 'string', 'max:255'],
             'bifrost_key_name' => ['nullable', 'string', 'max:255'],
@@ -133,6 +133,9 @@ class ModelControlController extends Controller
         if ($error = $this->providerMembershipError($data['provider_model_identifier'])) {
             return back()->withErrors(['provider_model_identifier' => $error]);
         }
+
+        // Blank routes through the shared Bifrost base URL; the column is not nullable.
+        $data['base_url'] = (string) ($data['base_url'] ?? '');
 
         $pricing = [
             'input_cost' => $data['input_cost'] ?? null,

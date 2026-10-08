@@ -123,7 +123,12 @@ const selectedKeyPayload = () => {
 
 // Keys of the provider named by a target's "provider/model" identifier.
 const keysForIdentifier = (identifier) => {
-    const provider = String(identifier ?? '').split('/')[0];
+    const id = String(identifier ?? '');
+    // Without a provider prefix, offer every provider's keys so an existing pin still resolves.
+    if (!id.includes('/')) {
+        return bifrostProviders.value.flatMap((p) => p.keys ?? []);
+    }
+    const provider = id.split('/')[0];
     return bifrostProviders.value.find((p) => p.name === provider)?.keys ?? [];
 };
 
@@ -855,6 +860,7 @@ const statusBadgeClass = (status) => (status === 'active' ? 'text-bg-success' : 
                                 <label class="form-label">Model identifier</label>
                                 <input v-model="targetForm.provider_model_identifier" type="text" class="form-control font-monospace" :class="{ 'is-invalid': targetForm.errors.provider_model_identifier }" />
                                 <div class="invalid-feedback">{{ targetForm.errors.provider_model_identifier }}</div>
+                                <div class="form-text"><code>provider/deployment</code>, e.g. <code>azure/gpt-4.1-mini</code>.</div>
                             </div>
                             <div class="col-12">
                                 <label class="form-label">Key (account)</label>
@@ -876,8 +882,9 @@ const statusBadgeClass = (status) => (status === 'active' ? 'text-bg-success' : 
                             </div>
                             <div class="col-12">
                                 <label class="form-label">Base URL</label>
-                                <input v-model="targetForm.base_url" type="text" class="form-control font-monospace" :class="{ 'is-invalid': targetForm.errors.base_url }" />
+                                <input v-model="targetForm.base_url" type="text" class="form-control font-monospace" :class="{ 'is-invalid': targetForm.errors.base_url }" placeholder="Blank = shared Bifrost gateway" />
                                 <div class="invalid-feedback">{{ targetForm.errors.base_url }}</div>
+                                <div class="form-text">Leave blank. This is the Bifrost gateway URL, not the Azure endpoint (that lives on the Bifrost key).</div>
                             </div>
                             <div class="col-12">
                                 <label class="form-label d-block">Capabilities</label>
