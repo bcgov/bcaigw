@@ -184,6 +184,9 @@ objects:
             - ip: ${FOUNDRY_PRIVATE_IP}
               hostnames:
                 - ${FOUNDRY_HOSTNAME}
+            - ip: ${FOUNDRY_EAST_PRIVATE_IP}
+              hostnames:
+                - ${FOUNDRY_EAST_HOSTNAME}
           # OpenShift runs this pod with an arbitrary UID and GID 0; fsGroup makes
           # the mounted PVC group-writable so Bifrost can write /app/data.
           securityContext:
@@ -500,6 +503,14 @@ parameters:
   - name: FOUNDRY_PRIVATE_IP
     description: Private endpoint IP for the Azure Foundry hostname. Override per environment.
     value: '10.46.129.6'
+    required: false
+  - name: FOUNDRY_EAST_HOSTNAME
+    description: Public hostname of the ca-east Azure Foundry account; pinned to its PrivateLink IP via hostAliases. Override per environment.
+    value: 'bcaigw-foundry-ca-east.services.ai.azure.com'
+    required: false
+  - name: FOUNDRY_EAST_PRIVATE_IP
+    description: Private endpoint IP for the ca-east Azure Foundry hostname. Override per environment.
+    value: '10.46.129.134'
     required: false
   - name: 'JOB_NAME'
     displayName: 'Job Name'
