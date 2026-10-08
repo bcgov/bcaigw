@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { router, useForm } from '@inertiajs/vue3';
 import axios from 'axios';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
@@ -88,6 +88,7 @@ const toggleGrant = (grant) => {
 const bifrostProviders = ref([]);
 const loadingProviders = ref(false);
 const selectedProvider = ref('');
+const selectedKey = ref('');
 const discovered = ref([]);
 const hasDiscovered = ref(false);
 const discovering = ref(false);
@@ -97,15 +98,44 @@ const allowlistOpen = ref(false);
 const manual = ref({ id: '', name: '', input_cost: '', output_cost: '', context_window: '', max_output_tokens: '' });
 const addingManual = ref(false);
 
+// Keys (accounts) of the provider currently chosen for discovery.
+const providerKeys = computed(() => bifrostProviders.value.find((p) => p.name === selectedProvider.value)?.keys ?? []);
+
+// Keep the key selection valid for the chosen provider, preferring an enabled key.
+const syncSelectedKey = () => {
+    const keys = providerKeys.value;
+    if (!keys.length) {
+        selectedKey.value = '';
+        return;
+    }
+    if (!keys.some((k) => k.id === selectedKey.value)) {
+        selectedKey.value = (keys.find((k) => k.enabled) ?? keys[0]).id;
+    }
+};
+
+watch(selectedProvider, syncSelectedKey);
+
 const loadBifrostProviders = async () => {
     loadingProviders.value = true;
     discoverError.value = '';
     try {
         const { data } = await axios.get('/admin/model-control/bifrost/providers');
-        bifrostProviders.value = data.providers ?? [];
-        if (!selectedProvider.value && bifrostProviders.value.length) {
-            selectedProvider.value = bifrostProviders.value[0].name;
+        const providers = data.providers ?? [];
+        // Fetch each provider's keys so the UI can show the provider → keys →
+        // models hierarchy and scope discovery to one account.
+        await Promise.all(providers.map(async (p) => {
+            try {
+                const res = await axios.get('/admin/model-control/bifrost/keys', { params: { provider: p.name } });
+                p.keys = res.data.keys ?? [];
+            } catch {
+                p.keys = [];
+            }
+        }));
+        bifrostProviders.value = providers;
+        if (!selectedProvider.value && providers.length) {
+            selectedProvider.value = providers[0].name;
         }
+        syncSelectedKey();
     } catch (error) {
         discoverError.value = error.response?.data?.error ?? 'Could not load Bifrost providers.';
     } finally {
@@ -122,7 +152,7 @@ const runDiscovery = async () => {
     discoverError.value = '';
     try {
         const { data } = await axios.get('/admin/model-control/discover', {
-            params: { provider: selectedProvider.value },
+            params: { provider: selectedProvider.value, key: selectedKey.value || undefined },
         });
         discovered.value = (data.models ?? []).map((m) => ({
             ...m,
@@ -368,30 +398,49 @@ const statusBadgeClass = (status) => (status === 'active' ? 'text-bg-success' : 
                     Refresh
                 </button>
             </div>
-            <p class="text-secondary small mt-1">Providers currently enabled on the Bifrost gateway (<code>provider_status</code> active), managed in the Bifrost dashboard. Every model you add or edit must belong to one of these providers.</p>
-            <div class="card shadow-sm mt-2">
+            <p class="text-secondary small mt-1">Providers currently enabled on the Bifrost gateway (<code>provider_status</code> active), managed in the Bifrost dashboard. Each provider has one or more keys (accounts); a model belongs to a key, which belongs to a provider. Every model you add or edit must belong to one of these providers.</p>
+
+            <div v-if="bifrostProviders.length === 0" class="card shadow-sm mt-2">
+                <div class="card-body text-secondary">{{ loadingProviders ? 'Loading…' : 'No providers enabled on Bifrost.' }}</div>
+            </div>
+
+            <div v-for="p in bifrostProviders" :key="p.name" class="card shadow-sm mt-2">
+                <div class="card-header d-flex align-items-center flex-wrap gap-2">
+                    <span class="fw-semibold">{{ p.name }}</span>
+                    <span v-if="p.type && p.type !== p.name" class="text-secondary small">({{ p.type }})</span>
+                    <span class="badge text-bg-success">{{ p.provider_status }}</span>
+                    <span v-if="p.status" class="badge" :class="p.status === 'list_models_failed' ? 'text-bg-warning' : 'text-bg-light text-dark border'">{{ p.status }}</span>
+                    <span v-if="p.description" class="text-secondary small ms-auto">{{ p.description }}</span>
+                </div>
                 <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
+                    <table class="table table-sm table-hover align-middle mb-0">
                         <thead class="table-light">
                             <tr>
-                                <th scope="col">Name</th>
-                                <th scope="col">Type</th>
+                                <th scope="col">Key (account)</th>
+                                <th scope="col">Enabled</th>
                                 <th scope="col">Status</th>
-                                <th scope="col">Operational</th>
+                                <th scope="col">Model allow-list</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-if="bifrostProviders.length === 0">
-                                <td colspan="4" class="text-secondary py-3">{{ loadingProviders ? 'Loading…' : 'No providers enabled on Bifrost.' }}</td>
-                            </tr>
-                            <tr v-for="p in bifrostProviders" :key="p.name">
-                                <td class="fw-semibold">{{ p.name }}</td>
-                                <td>{{ p.type && p.type !== p.name ? p.type : '—' }}</td>
-                                <td><span class="badge text-bg-success">{{ p.provider_status }}</span></td>
+                            <tr v-if="!(p.keys ?? []).length"><td colspan="4" class="text-secondary py-2">No keys configured.</td></tr>
+                            <tr v-for="k in (p.keys ?? [])" :key="k.id">
+                                <td class="fw-semibold">
+                                    <div>{{ k.name || k.id }}</div>
+                                    <div v-if="k.endpoint" class="text-secondary small font-monospace">{{ k.endpoint }}</div>
+                                </td>
+                                <td><span class="badge" :class="k.enabled ? 'text-bg-success' : 'text-bg-secondary'">{{ k.enabled ? 'enabled' : 'disabled' }}</span></td>
                                 <td>
-                                    <span v-if="p.status" class="badge" :class="p.status === 'list_models_failed' ? 'text-bg-warning' : 'text-bg-light text-dark border'">{{ p.status }}</span>
+                                    <span v-if="k.status" class="badge" :class="k.status === 'list_models_failed' ? 'text-bg-warning' : 'text-bg-light text-dark border'">{{ k.status }}</span>
                                     <span v-else class="text-secondary">—</span>
-                                    <div v-if="p.description" class="text-secondary small">{{ p.description }}</div>
+                                    <div v-if="k.description" class="text-secondary small">{{ k.description }}</div>
+                                </td>
+                                <td>
+                                    <span v-if="k.allowlist_open" class="badge text-bg-light text-dark border">all models (*)</span>
+                                    <template v-else>
+                                        <span v-for="m in k.models" :key="m" class="badge text-bg-light text-dark border me-1">{{ m }}</span>
+                                        <span v-if="!k.models.length" class="text-secondary">—</span>
+                                    </template>
                                 </td>
                             </tr>
                         </tbody>
@@ -404,10 +453,16 @@ const statusBadgeClass = (status) => (status === 'active' ? 'text-bg-success' : 
             <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <h3 class="h5 fw-semibold mb-0">Discover models from Bifrost</h3>
                 <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <select v-model="selectedProvider" class="form-select form-select-sm" style="min-width: 14rem;" :disabled="loadingProviders || bifrostProviders.length === 0">
+                    <select v-model="selectedProvider" class="form-select form-select-sm" style="min-width: 11rem;" :disabled="loadingProviders || bifrostProviders.length === 0">
                         <option v-if="bifrostProviders.length === 0" value="">No providers enabled on Bifrost</option>
                         <option v-for="p in bifrostProviders" :key="p.name" :value="p.name">
                             {{ p.name }}{{ p.type && p.type !== p.name ? ` (${p.type})` : '' }}
+                        </option>
+                    </select>
+                    <select v-model="selectedKey" class="form-select form-select-sm" style="min-width: 12rem;" :disabled="loadingProviders || providerKeys.length === 0">
+                        <option v-if="providerKeys.length === 0" value="">All keys</option>
+                        <option v-for="k in providerKeys" :key="k.id" :value="k.id">
+                            {{ k.name || k.id }}{{ k.enabled ? '' : ' (disabled)' }}
                         </option>
                     </select>
                     <button type="button" class="btn btn-outline-secondary btn-sm" :disabled="loadingProviders" @click="loadBifrostProviders">
@@ -420,7 +475,7 @@ const statusBadgeClass = (status) => (status === 'active' ? 'text-bg-success' : 
                     </button>
                 </div>
             </div>
-            <p class="text-secondary small mt-1">Lists the models allow-listed on the selected provider's keys in Bifrost that are not yet registered here. Set pricing per million tokens before adding. Bifrost does not publish costs, so enter them from your rate card. Configure provider credentials and the model allow-list in the Bifrost dashboard, or add a model by identifier below.</p>
+            <p class="text-secondary small mt-1">Lists the models the selected key (account) can access in Bifrost that are not yet registered here. Set pricing per million tokens before adding. Bifrost does not publish costs, so enter them from your rate card. Configure provider credentials and the model allow-list in the Bifrost dashboard, or add a model by identifier below.</p>
 
             <div v-if="discoverError" class="alert alert-danger py-2">{{ discoverError }}</div>
 

@@ -393,6 +393,58 @@ class ModelControlController extends Controller
     }
 
     /**
+     * List the keys (accounts) configured on a Bifrost provider so the admin can
+     * pick which account's models to discover. Secret values are never returned.
+     */
+    public function bifrostProviderKeys(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'provider' => ['required', 'string', 'max:255', 'regex:/^[A-Za-z0-9][A-Za-z0-9._-]*$/'],
+        ]);
+
+        $provider = $data['provider'];
+
+        try {
+            $response = $this->bifrostRequest()
+                ->timeout(15)
+                ->get($this->bifrostBaseUrl().'/api/providers/'.$provider.'/keys');
+        } catch (Throwable $e) {
+            return response()->json(['error' => 'Could not reach Bifrost: '.$e->getMessage()], 502);
+        }
+
+        if ($response->status() === 404) {
+            return response()->json(['error' => "Provider '{$provider}' is not configured on Bifrost."], 404);
+        }
+
+        if (! $response->successful()) {
+            return response()->json(['error' => 'Bifrost returned HTTP '.$response->status().'.'], 502);
+        }
+
+        $keys = collect($response->json('keys', []))
+            ->map(function (array $k) {
+                $models = array_values(array_filter((array) ($k['models'] ?? []), 'is_string'));
+                // Endpoint is informational (which account); redact nothing else.
+                $endpoint = $k['azure_key_config']['endpoint']['value'] ?? null;
+
+                return [
+                    'id' => (string) ($k['id'] ?? ''),
+                    'name' => (string) ($k['name'] ?? ''),
+                    'enabled' => (bool) ($k['enabled'] ?? false),
+                    'status' => (string) ($k['status'] ?? ''),
+                    'description' => (string) ($k['description'] ?? ''),
+                    'models' => $models,
+                    'allowlist_open' => $models === [] || in_array('*', $models, true),
+                    'endpoint' => is_string($endpoint) ? $endpoint : null,
+                ];
+            })
+            ->filter(fn (array $k) => $k['id'] !== '')
+            ->values()
+            ->all();
+
+        return response()->json(['keys' => $keys]);
+    }
+
+    /**
      * List models the selected Bifrost provider exposes that are not yet
      * registered as upstream targets.
      */
@@ -402,9 +454,13 @@ class ModelControlController extends Controller
             // A Bifrost provider name: a built-in vendor (azure, bedrock, openai)
             // or a custom provider instance (e.g. ca-central, ca-east).
             'provider' => ['required', 'string', 'max:255', 'regex:/^[A-Za-z0-9][A-Za-z0-9._-]*$/'],
+            // Optional key (account) id: scope discovery to the models that one
+            // key can access instead of the provider's whole catalog.
+            'key' => ['nullable', 'string', 'max:255'],
         ]);
 
         $providerName = $data['provider'];
+        $keyId = $data['key'] ?? null;
 
         // Fetch the provider once: confirms it exists on Bifrost, exposes its key
         // allowlist for the fallback path, and resolves its base type so a custom
@@ -432,10 +488,10 @@ class ModelControlController extends Controller
         $existing = UpstreamTarget::query()->pluck('provider_model_identifier')->all();
 
         // Preferred path: Bifrost's management model catalog (GET /api/models),
-        // scoped to this provider. Older builds (e.g. v1.3.9) serve the dashboard
-        // SPA here, in which case $catalog is null and we fall back to the
-        // provider's own key allowlist below.
-        $catalog = $this->discoverFromCatalog($providerName, $baseType);
+        // scoped to this provider (and key, when one is selected). Older builds
+        // (e.g. v1.3.9) serve the dashboard SPA here, in which case $catalog is
+        // null and we fall back to the provider's own key allowlist below.
+        $catalog = $this->discoverFromCatalog($providerName, $baseType, $keyId);
 
         if ($catalog !== null) {
             $models = collect($catalog)
@@ -460,6 +516,11 @@ class ModelControlController extends Controller
         $ids = [];
 
         foreach ((array) $providerResponse->json('keys', []) as $key) {
+            // When a key is selected, only that account's allowlist is relevant.
+            if ($keyId !== null && ($key['id'] ?? null) !== $keyId) {
+                continue;
+            }
+
             $models = (array) ($key['models'] ?? []);
 
             if ($models === [] || in_array('*', $models, true)) {
@@ -496,16 +557,22 @@ class ModelControlController extends Controller
      *
      * @return list<string>|null
      */
-    private function discoverFromCatalog(string $providerName, string $baseType): ?array
+    private function discoverFromCatalog(string $providerName, string $baseType, ?string $keyId = null): ?array
     {
+        // With a key selected, scope to the models that account can access (the
+        // key allowlist applies). Without one, show the provider's whole catalog.
+        $query = ['provider' => $providerName, 'limit' => 1000];
+
+        if ($keyId !== null && $keyId !== '') {
+            $query['keys'] = $keyId;
+        } else {
+            $query['unfiltered'] = 'true';
+        }
+
         try {
             $response = $this->bifrostRequest()
                 ->timeout(20)
-                ->get($this->bifrostBaseUrl().'/api/models', [
-                    'provider' => $providerName,
-                    'limit' => 1000,
-                    'unfiltered' => 'true',
-                ]);
+                ->get($this->bifrostBaseUrl().'/api/models', $query);
         } catch (Throwable) {
             return null;
         }

@@ -30,6 +30,7 @@ Route::middleware(['auth', 'superadmin'])->prefix('admin')->name('admin.')->grou
     Route::get('/model-control', [ModelControlController::class, 'index'])->name('model-control.index');
     Route::post('/model-control/test', [ModelControlController::class, 'testTarget'])->name('model-control.test');
     Route::get('/model-control/bifrost/providers', [ModelControlController::class, 'bifrostProviders'])->name('model-control.bifrost.providers');
+    Route::get('/model-control/bifrost/keys', [ModelControlController::class, 'bifrostProviderKeys'])->name('model-control.bifrost.keys');
     Route::get('/model-control/discover', [ModelControlController::class, 'discoverModels'])->name('model-control.discover');
     Route::post('/model-control/models', [ModelControlController::class, 'storeDiscoveredModel'])->name('model-control.models.store');
 
