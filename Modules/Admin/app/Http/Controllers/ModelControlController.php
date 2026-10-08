@@ -128,6 +128,10 @@ class ModelControlController extends Controller
             'cached_input_cost' => ['nullable', 'numeric', 'min:0', 'max:100000'],
         ]);
 
+        if ($error = $this->providerMembershipError($data['provider_model_identifier'])) {
+            return back()->withErrors(['provider_model_identifier' => $error]);
+        }
+
         $pricing = [
             'input_cost' => $data['input_cost'] ?? null,
             'output_cost' => $data['output_cost'] ?? null,
@@ -307,9 +311,12 @@ class ModelControlController extends Controller
             return response()->json(['error' => 'Bifrost returned HTTP '.$response->status().'.'], 502);
         }
 
+        // Surface only providers Bifrost reports as enabled (provider_status
+        // active). The list response has no keys array (keys live behind a
+        // separate endpoint), so provider_status is the source of truth for
+        // whether a provider can serve traffic.
         $providers = collect($response->json('providers', []))
             ->map(function (array $p) {
-                $keys = is_array($p['keys'] ?? null) ? count($p['keys']) : 0;
                 $name = (string) ($p['name'] ?? '');
                 // A second account under the same vendor is a Bifrost custom provider
                 // with its own name and a base_provider_type (e.g. ca-east -> azure).
@@ -318,16 +325,71 @@ class ModelControlController extends Controller
                 return [
                     'name' => $name,
                     'type' => is_string($baseType) && $baseType !== '' ? $baseType : $name,
-                    'keys' => $keys,
-                    'status' => $keys > 0 ? 'configured' : 'no keys',
+                    'provider_status' => (string) ($p['provider_status'] ?? 'unknown'),
+                    'status' => (string) ($p['status'] ?? ''),
+                    'description' => (string) ($p['description'] ?? ''),
                 ];
             })
-            ->filter(fn (array $p) => $p['name'] !== '')
+            ->filter(fn (array $p) => $p['name'] !== '' && $p['provider_status'] === 'active')
             ->sortBy('name')
             ->values()
             ->all();
 
         return response()->json(['providers' => $providers]);
+    }
+
+    /**
+     * Names of providers Bifrost currently reports as active. Returns null when
+     * Bifrost cannot be reached so callers can fail open rather than block edits
+     * during a transient outage.
+     *
+     * @return list<string>|null
+     */
+    private function activeBifrostProviderNames(): ?array
+    {
+        try {
+            $response = $this->bifrostRequest()->timeout(15)->get($this->bifrostBaseUrl().'/api/providers');
+        } catch (Throwable) {
+            return null;
+        }
+
+        if (! $response->successful()) {
+            return null;
+        }
+
+        return collect($response->json('providers', []))
+            ->filter(fn ($p) => is_array($p) && ($p['provider_status'] ?? null) === 'active')
+            ->map(fn ($p) => (string) ($p['name'] ?? ''))
+            ->filter(fn (string $name) => $name !== '')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Enforce that a model identifier names an active Bifrost provider. The
+     * identifier is `provider/model`; its provider segment must be one Bifrost
+     * currently serves. Returns an error message, or null when acceptable (or
+     * when Bifrost is unreachable, in which case we fail open).
+     */
+    private function providerMembershipError(string $identifier): ?string
+    {
+        $names = $this->activeBifrostProviderNames();
+
+        if ($names === null) {
+            return null;
+        }
+
+        if ($names === []) {
+            return 'No providers are currently active on Bifrost. Enable one in the Bifrost dashboard first.';
+        }
+
+        $provider = Str::contains($identifier, '/') ? Str::before($identifier, '/') : '';
+
+        if ($provider === '' || ! in_array($provider, $names, true)) {
+            return 'The model must belong to an active Bifrost provider ('.implode(', ', $names).'). Prefix the identifier with "<provider>/".';
+        }
+
+        return null;
     }
 
     /**
@@ -762,6 +824,10 @@ class ModelControlController extends Controller
 
         if (UpstreamTarget::query()->where('provider_model_identifier', $data['model_id'])->exists()) {
             return response()->json(['error' => 'That model is already registered as an upstream target.'], 409);
+        }
+
+        if ($error = $this->providerMembershipError($data['model_id'])) {
+            return response()->json(['error' => $error], 422);
         }
 
         $provider = $this->bifrostProviderAccount();

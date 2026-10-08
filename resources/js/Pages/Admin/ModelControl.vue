@@ -279,27 +279,6 @@ const regionPill = (m) => {
 // --- Edit / update / deactivate ---
 const CAPABILITIES = ['chat', 'structured_output', 'tool_use', 'embeddings'];
 
-// Providers
-const editingProvider = ref(null);
-const providerForm = useForm({ name: '', environment: '', region: '', status: 'active' });
-const openProviderEdit = (p) => {
-    editingProvider.value = p;
-    providerForm.clearErrors();
-    providerForm.name = p.name;
-    providerForm.environment = p.environment;
-    providerForm.region = p.region ?? '';
-    providerForm.status = p.status;
-};
-const saveProvider = () => {
-    providerForm.put(`/admin/model-control/providers/${editingProvider.value.public_id}`, {
-        preserveScroll: true,
-        onSuccess: () => { editingProvider.value = null; },
-    });
-};
-const setProviderStatus = (p, status) => {
-    router.put(`/admin/model-control/providers/${p.public_id}/status`, { status }, { preserveScroll: true });
-};
-
 // Upstream targets
 const editingTarget = ref(null);
 const targetForm = useForm({
@@ -382,7 +361,14 @@ const statusBadgeClass = (status) => (status === 'active' ? 'text-bg-success' : 
         <p class="text-secondary">Manage providers, targets, aliases and pricing. Records are deactivated (not deleted) to preserve audit history.</p>
 
         <section class="mt-4">
-            <h3 class="h5 fw-semibold">Providers</h3>
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <h3 class="h5 fw-semibold mb-0">Providers</h3>
+                <button type="button" class="btn btn-outline-secondary btn-sm" :disabled="loadingProviders" @click="loadBifrostProviders">
+                    <span v-if="loadingProviders" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    Refresh
+                </button>
+            </div>
+            <p class="text-secondary small mt-1">Providers currently enabled on the Bifrost gateway (<code>provider_status</code> active), managed in the Bifrost dashboard. Every model you add or edit must belong to one of these providers.</p>
             <div class="card shadow-sm mt-2">
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0">
@@ -390,26 +376,22 @@ const statusBadgeClass = (status) => (status === 'active' ? 'text-bg-success' : 
                             <tr>
                                 <th scope="col">Name</th>
                                 <th scope="col">Type</th>
-                                <th scope="col">Environment</th>
-                                <th scope="col">Region</th>
                                 <th scope="col">Status</th>
-                                <th scope="col">Version</th>
-                                <th scope="col" class="text-end">Actions</th>
+                                <th scope="col">Operational</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-if="providers.length === 0"><td colspan="7" class="text-secondary py-3">None.</td></tr>
-                            <tr v-for="p in providers" :key="p.public_id">
+                            <tr v-if="bifrostProviders.length === 0">
+                                <td colspan="4" class="text-secondary py-3">{{ loadingProviders ? 'Loading…' : 'No providers enabled on Bifrost.' }}</td>
+                            </tr>
+                            <tr v-for="p in bifrostProviders" :key="p.name">
                                 <td class="fw-semibold">{{ p.name }}</td>
-                                <td>{{ p.type }}</td>
-                                <td>{{ p.environment }}</td>
-                                <td>{{ p.region ?? '—' }}</td>
-                                <td><span class="badge" :class="statusBadgeClass(p.status)">{{ p.status }}</span></td>
-                                <td><span class="badge text-bg-light text-dark border">v{{ p.configuration_version }}</span></td>
-                                <td class="text-end text-nowrap">
-                                    <button type="button" class="btn btn-outline-primary btn-sm me-1" @click="openProviderEdit(p)">Edit</button>
-                                    <button v-if="p.status === 'active'" type="button" class="btn btn-outline-danger btn-sm" @click="setProviderStatus(p, 'disabled')">Deactivate</button>
-                                    <button v-else type="button" class="btn btn-outline-success btn-sm" @click="setProviderStatus(p, 'active')">Activate</button>
+                                <td>{{ p.type && p.type !== p.name ? p.type : '—' }}</td>
+                                <td><span class="badge text-bg-success">{{ p.provider_status }}</span></td>
+                                <td>
+                                    <span v-if="p.status" class="badge" :class="p.status === 'list_models_failed' ? 'text-bg-warning' : 'text-bg-light text-dark border'">{{ p.status }}</span>
+                                    <span v-else class="text-secondary">—</span>
+                                    <div v-if="p.description" class="text-secondary small">{{ p.description }}</div>
                                 </td>
                             </tr>
                         </tbody>
@@ -425,7 +407,7 @@ const statusBadgeClass = (status) => (status === 'active' ? 'text-bg-success' : 
                     <select v-model="selectedProvider" class="form-select form-select-sm" style="min-width: 14rem;" :disabled="loadingProviders || bifrostProviders.length === 0">
                         <option v-if="bifrostProviders.length === 0" value="">No providers enabled on Bifrost</option>
                         <option v-for="p in bifrostProviders" :key="p.name" :value="p.name">
-                            {{ p.name }}{{ p.type && p.type !== p.name ? ` (${p.type})` : '' }} · {{ p.keys > 0 ? `${p.keys} key${p.keys === 1 ? '' : 's'}` : 'no keys' }}
+                            {{ p.name }}{{ p.type && p.type !== p.name ? ` (${p.type})` : '' }}
                         </option>
                     </select>
                     <button type="button" class="btn btn-outline-secondary btn-sm" :disabled="loadingProviders" @click="loadBifrostProviders">
@@ -772,46 +754,6 @@ const statusBadgeClass = (status) => (status === 'active' ? 'text-bg-success' : 
                             <span v-if="testForm.processing" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
                             {{ testForm.processing ? 'Running…' : 'Run test' }}
                         </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Provider edit modal -->
-        <div v-if="editingProvider" class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,.5);">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">Edit provider</h5>
-                        <button type="button" class="btn-close" @click="editingProvider = null"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="mb-3">
-                            <label class="form-label">Name</label>
-                            <input v-model="providerForm.name" type="text" class="form-control" :class="{ 'is-invalid': providerForm.errors.name }" />
-                            <div class="invalid-feedback">{{ providerForm.errors.name }}</div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Environment</label>
-                            <input v-model="providerForm.environment" type="text" class="form-control" :class="{ 'is-invalid': providerForm.errors.environment }" />
-                            <div class="invalid-feedback">{{ providerForm.errors.environment }}</div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Region</label>
-                            <input v-model="providerForm.region" type="text" class="form-control" :class="{ 'is-invalid': providerForm.errors.region }" />
-                            <div class="invalid-feedback">{{ providerForm.errors.region }}</div>
-                        </div>
-                        <div class="mb-1">
-                            <label class="form-label">Status</label>
-                            <select v-model="providerForm.status" class="form-select">
-                                <option value="active">active</option>
-                                <option value="disabled">disabled</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" @click="editingProvider = null">Cancel</button>
-                        <button type="button" class="btn btn-primary" :disabled="providerForm.processing" @click="saveProvider">Save changes</button>
                     </div>
                 </div>
             </div>
