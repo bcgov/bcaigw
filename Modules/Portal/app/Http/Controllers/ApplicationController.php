@@ -88,10 +88,13 @@ class ApplicationController extends Controller
     {
         $this->authorize('view', $application);
 
-        $application->load([
-            'users:id,name,idir_username',
-            'lifecycleHistory' => fn ($query) => $query->with('actor:id,name')->latest('id'),
-        ]);
+        $isAdmin = $request->user()->isAdministrator();
+
+        $application->load('users:id,name,idir_username');
+
+        if ($isAdmin) {
+            $application->load(['lifecycleHistory' => fn ($query) => $query->with('actor:id,name')->latest('id')]);
+        }
 
         return Inertia::render('Portal/Applications/Show', [
             'application' => $application,
@@ -127,6 +130,7 @@ class ApplicationController extends Controller
                 'submit' => $request->user()->can('submit', $application),
                 'promote' => $request->user()->can('promote', $application),
                 'manageMembers' => $request->user()->can('manageMembers', $application),
+                'viewAdminTools' => $isAdmin,
             ],
             'apiUsage' => [
                 'token_endpoint' => config('gateway.api_auth.token_endpoint'),

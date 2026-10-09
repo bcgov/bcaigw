@@ -494,7 +494,7 @@ const runTest = async () => {
             </div>
         </div>
 
-        <section class="card shadow-sm mt-4">
+        <section v-if="can.viewAdminTools" class="card shadow-sm mt-4">
             <div class="card-body">
                 <h3 class="h5 fw-bold">Lifecycle history</h3>
                 <ul class="list-group list-group-flush">
@@ -507,6 +507,7 @@ const runTest = async () => {
             </div>
         </section>
 
+        <template v-if="can.viewAdminTools">
         <section class="card shadow-sm mt-4 border-top border-4 border-primary-subtle">
             <div class="card-body">
                 <div class="d-flex align-items-start justify-content-between flex-wrap gap-2">
@@ -716,5 +717,6 @@ const runTest = async () => {
                 </div>
             </div>
         </section>
+        </template>
     </PortalLayout>
 </template>
