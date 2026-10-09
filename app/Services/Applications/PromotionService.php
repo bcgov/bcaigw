@@ -50,15 +50,17 @@ class PromotionService
                 ->first();
 
             if ($environment === null) {
+                $defaults = (array) config('gateway.environment_defaults.'.ApplicationEnvironment::ENV_DEVELOPMENT, []);
+
                 $environment = new ApplicationEnvironment([
                     'environment' => ApplicationEnvironment::ENV_DEVELOPMENT,
-                    'rate_limit_per_minute' => $application->rate_limit_per_minute,
-                    'token_rate_per_minute' => $application->token_rate_per_minute,
-                    'token_budget_daily' => $application->token_budget_daily,
-                    'token_budget_monthly' => $application->token_budget_monthly,
-                    'cost_budget_daily' => $application->cost_budget_daily,
-                    'cost_budget_monthly' => $application->cost_budget_monthly,
-                    'budget_currency' => $application->budget_currency ?: 'CAD',
+                    'rate_limit_per_minute' => $application->rate_limit_per_minute ?? ($defaults['rate_limit_per_minute'] ?? null),
+                    'token_rate_per_minute' => $application->token_rate_per_minute ?? ($defaults['token_rate_per_minute'] ?? null),
+                    'token_budget_daily' => $application->token_budget_daily ?? ($defaults['token_budget_daily'] ?? null),
+                    'token_budget_monthly' => $application->token_budget_monthly ?? ($defaults['token_budget_monthly'] ?? null),
+                    'cost_budget_daily' => $application->cost_budget_daily ?? ($defaults['cost_budget_daily'] ?? null),
+                    'cost_budget_monthly' => $application->cost_budget_monthly ?? ($defaults['cost_budget_monthly'] ?? null),
+                    'budget_currency' => $application->budget_currency ?: (string) config('gateway.default_budget_currency', 'USD'),
                     'created_by' => $actor->id,
                 ]);
                 $environment->application_id = $application->id;
@@ -107,7 +109,7 @@ class PromotionService
                     'environment' => $toEnvironment,
                     'status' => ApplicationEnvironment::STATUS_PENDING,
                     'promoted_from' => $fromEnvironment,
-                    'budget_currency' => $source->budget_currency ?: 'CAD',
+                    'budget_currency' => $source->budget_currency ?: (string) config('gateway.default_budget_currency', 'USD'),
                     'created_by' => $actor->id,
                 ]);
                 $target->application_id = $application->id;

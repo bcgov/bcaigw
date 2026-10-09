@@ -14,6 +14,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 use Modules\Admin\Http\Requests\ApplicationTransitionRequest;
@@ -121,6 +122,8 @@ class ApplicationReviewController extends Controller
             'environments' => $this->environmentsPayload($application),
             'promotions' => $this->promotionsPayload($application),
             'changeRequests' => $this->changeRequestsPayload($application),
+            'classifications' => config('gateway.classifications'),
+            'budgetCurrencies' => config('gateway.budget_currencies', ['USD']),
         ]);
     }
 
@@ -194,9 +197,11 @@ class ApplicationReviewController extends Controller
                 'label' => $labels[$environment] ?? ucfirst($environment),
                 'status' => $record->status,
                 'rate_limit_per_minute' => $record->rate_limit_per_minute,
+                'token_budget_daily' => $record->token_budget_daily,
                 'token_budget_monthly' => $record->token_budget_monthly,
+                'cost_budget_daily' => $record->cost_budget_daily !== null ? (float) $record->cost_budget_daily : null,
                 'cost_budget_monthly' => $record->cost_budget_monthly !== null ? (float) $record->cost_budget_monthly : null,
-                'currency' => $record->budget_currency ?: 'CAD',
+                'currency' => $record->budget_currency ?: (string) config('gateway.default_budget_currency', 'USD'),
                 'model_count' => $application->modelGrants()
                     ->where('environment', $environment)
                     ->where('enabled', true)
@@ -353,6 +358,112 @@ class ApplicationReviewController extends Controller
         }
 
         return back()->with('success', 'Promotion rejected.');
+    }
+
+    /**
+     * Admin edit of the application's descriptive details.
+     */
+    public function updateDetails(Request $request, Application $application): RedirectResponse
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:150'],
+            'ministry_organization' => ['required', 'string', 'max:180'],
+            'purpose_use_case' => ['required', 'string', 'max:5000'],
+            'primary_contact_name' => ['required', 'string', 'max:150'],
+            'primary_contact_email' => ['required', 'email:rfc', 'max:254'],
+            'technical_contact_name' => ['nullable', 'string', 'max:150'],
+            'technical_contact_email' => ['nullable', 'email:rfc', 'max:254'],
+            'data_classification' => ['required', 'string', Rule::in(array_keys(config('gateway.classifications')))],
+            'api_directory_client_id' => [
+                'required', 'string', 'max:255', 'regex:/^[A-Za-z0-9._:-]+$/',
+                Rule::unique('applications', 'api_directory_client_id')->ignore($application->id),
+            ],
+        ]);
+
+        DB::transaction(function () use ($application, $validated, $request): void {
+            $application->fill($validated);
+            $changes = $this->describeChanges($application);
+
+            if ($changes === []) {
+                return;
+            }
+
+            $application->save();
+            $this->recordAdminChange($application, $request->user(), 'Application details updated.', ['details' => $changes]);
+        });
+
+        return back()->with('success', 'Application details updated.');
+    }
+
+    /**
+     * Admin edit of one environment's status and limits.
+     */
+    public function updateEnvironment(Request $request, Application $application, string $environment): RedirectResponse
+    {
+        $record = $application->environment($environment);
+        abort_if($record === null, 404);
+
+        $validated = $request->validate([
+            'status' => ['required', Rule::in([ApplicationEnvironment::STATUS_ACTIVE, ApplicationEnvironment::STATUS_SUSPENDED, ApplicationEnvironment::STATUS_PENDING])],
+            'rate_limit_per_minute' => ['nullable', 'integer', 'min:1', 'max:1000000'],
+            'token_budget_daily' => ['nullable', 'integer', 'min:1'],
+            'token_budget_monthly' => ['nullable', 'integer', 'min:1'],
+            'cost_budget_daily' => ['nullable', 'numeric', 'min:0', 'max:10000000'],
+            'cost_budget_monthly' => ['nullable', 'numeric', 'min:0', 'max:10000000'],
+            'budget_currency' => ['required', 'string', Rule::in(config('gateway.budget_currencies', ['USD']))],
+        ]);
+
+        DB::transaction(function () use ($application, $record, $validated, $request): void {
+            $record->fill($validated);
+            $changes = $this->describeChanges($record);
+
+            if ($changes === []) {
+                return;
+            }
+
+            $record->configuration_version = $record->configuration_version + 1;
+            $record->save();
+
+            $label = config('gateway.environments.'.$record->environment, $record->environment);
+            $this->recordAdminChange($application, $request->user(), "{$label} environment settings updated.", [
+                'environment' => $record->environment,
+                'changes' => $changes,
+            ]);
+        });
+
+        return back()->with('success', 'Environment settings updated.');
+    }
+
+    /**
+     * Dirty attributes as [field => [from, to]] for the audit trail.
+     *
+     * @return array<string, array{0: mixed, 1: mixed}>
+     */
+    private function describeChanges(\Illuminate\Database\Eloquent\Model $model): array
+    {
+        $changes = [];
+
+        foreach (array_keys($model->getDirty()) as $field) {
+            $changes[$field] = [$model->getOriginal($field), $model->getAttribute($field)];
+        }
+
+        return $changes;
+    }
+
+    /**
+     * Admin edits don't change status, so they are logged as a same-status entry.
+     *
+     * @param  array<string, mixed>  $metadata
+     */
+    private function recordAdminChange(Application $application, User $actor, string $note, array $metadata): void
+    {
+        $application->lifecycleHistory()->create([
+            'from_status' => $application->status,
+            'to_status' => $application->status,
+            'actor_user_id' => $actor->id,
+            'note' => $note.' '.implode(', ', array_keys($metadata['changes'] ?? $metadata['details'] ?? [])),
+            'metadata' => $metadata,
+        ]);
     }
 
     /**

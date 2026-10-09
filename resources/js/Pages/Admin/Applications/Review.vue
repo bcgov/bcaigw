@@ -15,6 +15,8 @@ const props = defineProps({
     changeRequests: { type: Array, default: () => [] },
     bedrockRegion: { type: String, default: 'ca-central-1' },
     bedrockGeo: { type: String, default: 'ca' },
+    classifications: { type: Object, default: () => ({}) },
+    budgetCurrencies: { type: Array, default: () => ['USD'] },
 });
 
 const statusLabel = (status) => status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -86,6 +88,53 @@ const form = useForm({
     status_version: props.application.status_version,
     note: '',
 });
+
+// Admin edit of application details.
+const editingDetails = ref(false);
+const detailsForm = useForm({
+    name: '', ministry_organization: '', purpose_use_case: '',
+    primary_contact_name: '', primary_contact_email: '',
+    technical_contact_name: '', technical_contact_email: '',
+    data_classification: '', api_directory_client_id: '',
+});
+const openDetailsEdit = () => {
+    detailsForm.clearErrors();
+    Object.keys(detailsForm.data()).forEach((field) => {
+        detailsForm[field] = props.application[field] ?? '';
+    });
+    editingDetails.value = true;
+};
+const saveDetails = () => {
+    detailsForm.put(`/admin/applications/${props.application.public_id}/details`, {
+        preserveScroll: true,
+        onSuccess: () => { editingDetails.value = false; },
+    });
+};
+
+// Admin edit of one environment's status and limits.
+const editingEnv = ref(null);
+const envForm = useForm({
+    status: 'active', rate_limit_per_minute: '', token_budget_daily: '', token_budget_monthly: '',
+    cost_budget_daily: '', cost_budget_monthly: '', budget_currency: 'USD',
+});
+const openEnvEdit = (env) => {
+    envForm.clearErrors();
+    envForm.status = env.status;
+    envForm.rate_limit_per_minute = env.rate_limit_per_minute ?? '';
+    envForm.token_budget_daily = env.token_budget_daily ?? '';
+    envForm.token_budget_monthly = env.token_budget_monthly ?? '';
+    envForm.cost_budget_daily = env.cost_budget_daily ?? '';
+    envForm.cost_budget_monthly = env.cost_budget_monthly ?? '';
+    envForm.budget_currency = env.currency || 'USD';
+    editingEnv.value = env;
+};
+const saveEnv = () => {
+    envForm.put(`/admin/applications/${props.application.public_id}/environments/${editingEnv.value.environment}`, {
+        preserveScroll: true,
+        onSuccess: () => { editingEnv.value = null; },
+    });
+};
+const envMoney = (v, cur) => (v === null || v === undefined ? 'Not set' : `${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${cur}`);
 
 const submitTransition = () => {
     form.post(`/admin/applications/${props.application.public_id}/transition`, {
@@ -173,7 +222,10 @@ const rejectPromotion = (promotion) => {
             <div class="col-lg-8">
                 <section class="card shadow-sm h-100">
                     <div class="card-body">
-                        <h3 class="h5 fw-semibold">Details</h3>
+                        <div class="d-flex align-items-center justify-content-between">
+                            <h3 class="h5 fw-semibold mb-0">Details</h3>
+                            <button type="button" class="btn btn-outline-primary btn-sm" @click="openDetailsEdit">Edit details</button>
+                        </div>
                         <dl class="row mt-3 mb-0">
                             <div class="col-sm-6 mb-2"><dt class="small text-secondary fw-normal">Ministry</dt><dd class="mb-0">{{ application.ministry_organization }}</dd></div>
                             <div class="col-sm-6 mb-2"><dt class="small text-secondary fw-normal">Owner</dt><dd class="mb-0">{{ application.creator?.name }}</dd></div>
@@ -523,7 +575,7 @@ const rejectPromotion = (promotion) => {
         <section class="card shadow-sm mt-4">
             <div class="card-body">
                 <h3 class="h5 fw-semibold">Environments</h3>
-                <p class="text-secondary small">Per-environment status, budgets and enabled models.</p>
+                <p class="text-secondary small">Per-environment status, budgets and enabled models. Requests are rejected once a rate limit or budget is reached; blank means no limit.</p>
                 <div v-if="environments.length" class="table-responsive">
                     <table class="table table-sm align-middle mb-0">
                         <thead>
@@ -531,9 +583,12 @@ const rejectPromotion = (promotion) => {
                                 <th>Environment</th>
                                 <th>Status</th>
                                 <th class="text-end">Req/min</th>
-                                <th class="text-end">Token budget/mo</th>
-                                <th class="text-end">Cost budget/mo</th>
+                                <th class="text-end">Tokens/day</th>
+                                <th class="text-end">Tokens/mo</th>
+                                <th class="text-end">Cost/day</th>
+                                <th class="text-end">Cost/mo</th>
                                 <th class="text-end">Models</th>
+                                <th class="text-end"></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -546,9 +601,14 @@ const rejectPromotion = (promotion) => {
                                     </span>
                                 </td>
                                 <td class="text-end">{{ limitText(env.rate_limit_per_minute) }}</td>
+                                <td class="text-end">{{ limitText(env.token_budget_daily) }}</td>
                                 <td class="text-end">{{ limitText(env.token_budget_monthly) }}</td>
-                                <td class="text-end">{{ money(env.cost_budget_monthly) }}</td>
+                                <td class="text-end">{{ envMoney(env.cost_budget_daily, env.currency) }}</td>
+                                <td class="text-end">{{ envMoney(env.cost_budget_monthly, env.currency) }}</td>
                                 <td class="text-end">{{ env.model_count }}</td>
+                                <td class="text-end">
+                                    <button type="button" class="btn btn-outline-primary btn-sm" @click="openEnvEdit(env)">Edit</button>
+                                </td>
                             </tr>
                         </tbody>
                     </table>
@@ -751,5 +811,134 @@ const rejectPromotion = (promotion) => {
                 <p v-else class="text-secondary mb-0">No history yet.</p>
             </div>
         </section>
+
+        <!-- Edit application details -->
+        <div v-if="editingDetails" class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,.5);">
+            <div class="modal-dialog modal-dialog-centered modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Edit application details</h5>
+                        <button type="button" class="btn-close" @click="editingDetails = false"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Name</label>
+                                <input v-model="detailsForm.name" type="text" class="form-control" :class="{ 'is-invalid': detailsForm.errors.name }" />
+                                <div class="invalid-feedback">{{ detailsForm.errors.name }}</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Ministry / organization</label>
+                                <input v-model="detailsForm.ministry_organization" type="text" class="form-control" :class="{ 'is-invalid': detailsForm.errors.ministry_organization }" />
+                                <div class="invalid-feedback">{{ detailsForm.errors.ministry_organization }}</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Primary contact name</label>
+                                <input v-model="detailsForm.primary_contact_name" type="text" class="form-control" :class="{ 'is-invalid': detailsForm.errors.primary_contact_name }" />
+                                <div class="invalid-feedback">{{ detailsForm.errors.primary_contact_name }}</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Primary contact email</label>
+                                <input v-model="detailsForm.primary_contact_email" type="email" class="form-control" :class="{ 'is-invalid': detailsForm.errors.primary_contact_email }" />
+                                <div class="invalid-feedback">{{ detailsForm.errors.primary_contact_email }}</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Technical contact name <span class="text-secondary">(optional)</span></label>
+                                <input v-model="detailsForm.technical_contact_name" type="text" class="form-control" :class="{ 'is-invalid': detailsForm.errors.technical_contact_name }" />
+                                <div class="invalid-feedback">{{ detailsForm.errors.technical_contact_name }}</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Technical contact email <span class="text-secondary">(optional)</span></label>
+                                <input v-model="detailsForm.technical_contact_email" type="email" class="form-control" :class="{ 'is-invalid': detailsForm.errors.technical_contact_email }" />
+                                <div class="invalid-feedback">{{ detailsForm.errors.technical_contact_email }}</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Data classification</label>
+                                <select v-model="detailsForm.data_classification" class="form-select" :class="{ 'is-invalid': detailsForm.errors.data_classification }">
+                                    <option v-for="(label, value) in classifications" :key="value" :value="value">{{ label }}</option>
+                                </select>
+                                <div class="invalid-feedback">{{ detailsForm.errors.data_classification }}</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">API directory client ID</label>
+                                <input v-model="detailsForm.api_directory_client_id" type="text" class="form-control font-monospace" :class="{ 'is-invalid': detailsForm.errors.api_directory_client_id }" />
+                                <div class="invalid-feedback">{{ detailsForm.errors.api_directory_client_id }}</div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Purpose / use case</label>
+                                <textarea v-model="detailsForm.purpose_use_case" rows="4" class="form-control" :class="{ 'is-invalid': detailsForm.errors.purpose_use_case }"></textarea>
+                                <div class="invalid-feedback">{{ detailsForm.errors.purpose_use_case }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @click="editingDetails = false">Cancel</button>
+                        <button type="button" class="btn btn-primary" :disabled="detailsForm.processing" @click="saveDetails">Save changes</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit environment settings -->
+        <div v-if="editingEnv" class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,.5);">
+            <div class="modal-dialog modal-dialog-centered modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Edit {{ editingEnv.label }} environment</h5>
+                        <button type="button" class="btn-close" @click="editingEnv = null"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-secondary small">Leave a limit blank for no limit. Cost is measured against model pricing in the selected currency.</p>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Status</label>
+                                <select v-model="envForm.status" class="form-select" :class="{ 'is-invalid': envForm.errors.status }">
+                                    <option value="active">Active</option>
+                                    <option value="suspended">Suspended</option>
+                                    <option value="pending">Pending</option>
+                                </select>
+                                <div class="invalid-feedback">{{ envForm.errors.status }}</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Requests per minute</label>
+                                <input v-model="envForm.rate_limit_per_minute" type="number" min="1" class="form-control" :class="{ 'is-invalid': envForm.errors.rate_limit_per_minute }" />
+                                <div class="invalid-feedback">{{ envForm.errors.rate_limit_per_minute }}</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Token budget per day</label>
+                                <input v-model="envForm.token_budget_daily" type="number" min="1" class="form-control" :class="{ 'is-invalid': envForm.errors.token_budget_daily }" />
+                                <div class="invalid-feedback">{{ envForm.errors.token_budget_daily }}</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Token budget per month</label>
+                                <input v-model="envForm.token_budget_monthly" type="number" min="1" class="form-control" :class="{ 'is-invalid': envForm.errors.token_budget_monthly }" />
+                                <div class="invalid-feedback">{{ envForm.errors.token_budget_monthly }}</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Cost budget per day</label>
+                                <input v-model="envForm.cost_budget_daily" type="number" min="0" step="0.01" class="form-control" :class="{ 'is-invalid': envForm.errors.cost_budget_daily }" />
+                                <div class="invalid-feedback">{{ envForm.errors.cost_budget_daily }}</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Cost budget per month</label>
+                                <input v-model="envForm.cost_budget_monthly" type="number" min="0" step="0.01" class="form-control" :class="{ 'is-invalid': envForm.errors.cost_budget_monthly }" />
+                                <div class="invalid-feedback">{{ envForm.errors.cost_budget_monthly }}</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Currency</label>
+                                <select v-model="envForm.budget_currency" class="form-select" :class="{ 'is-invalid': envForm.errors.budget_currency }">
+                                    <option v-for="cur in budgetCurrencies" :key="cur" :value="cur">{{ cur }}</option>
+                                </select>
+                                <div class="invalid-feedback">{{ envForm.errors.budget_currency }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @click="editingEnv = null">Cancel</button>
+                        <button type="button" class="btn btn-primary" :disabled="envForm.processing" @click="saveEnv">Save changes</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </AdminLayout>
 </template>

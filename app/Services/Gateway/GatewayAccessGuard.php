@@ -44,8 +44,11 @@ class GatewayAccessGuard
             throw new GatewayException('The requested model has no active upstream target.', 503, 'model_unavailable');
         }
 
-        $this->assertWithinRateLimit($application, $environmentRecord);
         $this->assertWithinMonthlyBudget($application, $environmentRecord);
+        $this->assertWithinDailyTokenBudget($application, $environmentRecord);
+        $this->assertWithinCostBudgets($application, $environmentRecord);
+        // Last, so a request rejected on budget does not consume a rate-limit slot.
+        $this->assertWithinRateLimit($application, $environmentRecord);
 
         return [
             'alias' => $alias,
@@ -151,6 +154,57 @@ class GatewayAccessGuard
         if ($used >= $budget) {
             throw new GatewayException('The monthly token budget has been exhausted.', 429, 'monthly_budget_exceeded');
         }
+    }
+
+    private function assertWithinDailyTokenBudget(Application $application, ApplicationEnvironment $environment): void
+    {
+        $budget = $environment->token_budget_daily ?? $application->token_budget_daily;
+
+        if ($budget === null || $budget <= 0) {
+            return;
+        }
+
+        $used = (int) $this->usageSince($application, $environment, Carbon::now()->toDateString())
+            ->sum(DB::raw('input_tokens + output_tokens'));
+
+        if ($used >= $budget) {
+            throw new GatewayException('The daily token budget has been exhausted.', 429, 'daily_budget_exceeded');
+        }
+    }
+
+    private function assertWithinCostBudgets(Application $application, ApplicationEnvironment $environment): void
+    {
+        $windows = [
+            ['daily', $environment->cost_budget_daily ?? $application->cost_budget_daily, Carbon::now()->toDateString()],
+            ['monthly', $environment->cost_budget_monthly ?? $application->cost_budget_monthly, Carbon::now()->startOfMonth()->toDateString()],
+        ];
+
+        foreach ($windows as [$label, $budget, $from]) {
+            if ($budget === null || (float) $budget <= 0) {
+                continue;
+            }
+
+            // Rollup cost is stored in micro-units of the pricing currency.
+            $spent = ((int) $this->usageSince($application, $environment, $from)->sum('cost_microunits')) / 1_000_000;
+
+            if ($spent >= (float) $budget) {
+                $currency = $environment->budget_currency ?: (string) config('gateway.default_budget_currency', 'USD');
+
+                throw new GatewayException(
+                    "The {$label} cost budget of {$budget} {$currency} has been exhausted.",
+                    429,
+                    "{$label}_cost_budget_exceeded",
+                );
+            }
+        }
+    }
+
+    private function usageSince(Application $application, ApplicationEnvironment $environment, string $from): \Illuminate\Database\Eloquent\Builder
+    {
+        return GatewayUsageRollup::query()
+            ->where('application_id', $application->id)
+            ->where('environment', $environment->environment)
+            ->where('bucket_date', '>=', $from);
     }
 
     private function latestPricing(PublicModelAlias $alias): ?ModelPricingVersion

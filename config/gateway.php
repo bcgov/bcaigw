@@ -21,6 +21,19 @@ return [
         'test' => 'Test',
         'production' => 'Production',
     ],
+
+    // Model pricing is recorded in USD, so cost budgets default to USD.
+    'budget_currencies' => ['USD', 'CAD'],
+    'default_budget_currency' => env('GATEWAY_DEFAULT_BUDGET_CURRENCY', 'USD'),
+
+    // Limits applied when an environment is first created; null means unlimited/unset.
+    'environment_defaults' => [
+        'development' => [
+            'cost_budget_monthly' => env('GATEWAY_DEV_COST_BUDGET_MONTHLY', 1000),
+        ],
+        'test' => [],
+        'production' => [],
+    ],
     'classifications' => [
         'public' => 'Public',
         'protected_a' => 'Protected A',
