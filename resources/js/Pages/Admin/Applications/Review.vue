@@ -284,17 +284,21 @@ const rejectPromotion = (promotion) => {
                                     <span v-for="cap in grant.capabilities" :key="cap" class="badge text-bg-light border me-1">{{ cap }}</span>
                                 </div>
                             </div>
-                            <button
-                                type="button"
-                                class="btn btn-sm flex-shrink-0"
-                                :class="grant.enabled ? 'btn-success' : 'btn-outline-secondary'"
-                                :disabled="togglingGrants.includes(grant.public_id)"
-                                :title="grant.enabled ? 'Click to disable this model' : 'Click to enable this model'"
-                                @click="toggleGrant(grant)"
-                            >
-                                <span v-if="togglingGrants.includes(grant.public_id)" class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-                                {{ grant.enabled ? 'Enabled' : 'Disabled' }}
-                            </button>
+                            <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                                <span class="badge" :class="grant.enabled ? 'text-bg-success' : 'text-bg-secondary'">
+                                    {{ grant.enabled ? 'Enabled' : 'Disabled' }}
+                                </span>
+                                <button
+                                    type="button"
+                                    class="btn btn-sm"
+                                    :class="grant.enabled ? 'btn-outline-danger' : 'btn-outline-success'"
+                                    :disabled="togglingGrants.includes(grant.public_id)"
+                                    @click="toggleGrant(grant)"
+                                >
+                                    <span v-if="togglingGrants.includes(grant.public_id)" class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                                    {{ grant.enabled ? 'Disable' : 'Enable' }}
+                                </button>
+                            </div>
                         </div>
                     </li>
                 </ul>
