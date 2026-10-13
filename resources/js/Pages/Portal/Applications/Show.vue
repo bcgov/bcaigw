@@ -1,6 +1,7 @@
 <script setup>
 import { Link, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
+import axios from 'axios';
 import PortalLayout from '@/Layouts/PortalLayout.vue';
 
 const props = defineProps({
@@ -10,7 +11,38 @@ const props = defineProps({
     catalogModels: { type: Array, default: () => [] },
     can: { type: Object, default: () => ({}) },
     apiUsage: { type: Object, default: () => ({}) },
+    credentials: { type: Object, default: () => ({}) },
 });
+
+// API Directory client secret: fetched on demand, never part of the page payload.
+const revealedSecret = ref('');
+const revealingSecret = ref(false);
+const secretError = ref('');
+const copiedField = ref('');
+
+const revealSecret = async () => {
+    if (revealedSecret.value) {
+        revealedSecret.value = '';
+        return;
+    }
+    revealingSecret.value = true;
+    secretError.value = '';
+    try {
+        const { data } = await axios.post(`/portal/applications/${props.application.public_id}/credentials/secret`);
+        revealedSecret.value = data.client_secret ?? '';
+    } catch (error) {
+        secretError.value = error.response?.data?.message || 'Could not retrieve the client secret.';
+    } finally {
+        revealingSecret.value = false;
+    }
+};
+
+const copyValue = async (field, value) => {
+    if (!value) return;
+    await navigator.clipboard.writeText(value);
+    copiedField.value = field;
+    setTimeout(() => { copiedField.value = ''; }, 1500);
+};
 
 const statusLabel = (status) => status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
@@ -379,6 +411,42 @@ const runTest = async () => {
                         </div>
                     </div>
                 </div>
+            </div>
+        </section>
+
+        <section class="card shadow-sm mt-4">
+            <div class="card-body">
+                <h3 class="h6 fw-bold mb-1">API Directory credentials</h3>
+                <p class="text-secondary small mb-3">
+                    Use these to obtain a bearer token (<code>client_credentials</code> grant) and call BCAIGW.
+                    Keep the secret confidential and store it in your application's secret manager.
+                </p>
+                <p v-if="!credentials.client_id" class="text-secondary mb-0">
+                    Credentials are issued automatically when the application is approved and activated.
+                </p>
+                <dl v-else class="row small mb-0">
+                    <dt class="col-sm-3 text-secondary fw-normal">Client ID</dt>
+                    <dd class="col-sm-9 d-flex align-items-center gap-2">
+                        <code class="text-break">{{ credentials.client_id }}</code>
+                        <button type="button" class="btn btn-outline-secondary btn-sm py-0" @click="copyValue('id', credentials.client_id)">{{ copiedField === 'id' ? 'Copied' : 'Copy' }}</button>
+                    </dd>
+                    <dt class="col-sm-3 text-secondary fw-normal">Client secret</dt>
+                    <dd class="col-sm-9">
+                        <div v-if="credentials.has_secret" class="d-flex align-items-center gap-2 flex-wrap">
+                            <code class="text-break">{{ revealedSecret || '••••••••••••••••••••••••' }}</code>
+                            <button type="button" class="btn btn-outline-secondary btn-sm py-0" :disabled="revealingSecret" @click="revealSecret">
+                                {{ revealedSecret ? 'Hide' : (revealingSecret ? 'Loading…' : 'Reveal') }}
+                            </button>
+                            <button v-if="revealedSecret" type="button" class="btn btn-outline-secondary btn-sm py-0" @click="copyValue('secret', revealedSecret)">{{ copiedField === 'secret' ? 'Copied' : 'Copy' }}</button>
+                        </div>
+                        <span v-else class="text-secondary">Not available — contact the BCAIGW team.</span>
+                        <div v-if="secretError" class="text-danger small mt-1">{{ secretError }}</div>
+                    </dd>
+                    <dt class="col-sm-3 text-secondary fw-normal">Token endpoint</dt>
+                    <dd class="col-sm-9"><code class="text-break">{{ credentials.token_endpoint || '—' }}</code></dd>
+                    <dt v-if="credentials.issued_at" class="col-sm-3 text-secondary fw-normal">Issued</dt>
+                    <dd v-if="credentials.issued_at" class="col-sm-9 mb-0">{{ new Date(credentials.issued_at).toLocaleString() }}</dd>
+                </dl>
             </div>
         </section>
 

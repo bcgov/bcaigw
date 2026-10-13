@@ -17,6 +17,8 @@ Route::middleware(['auth', 'superadmin'])->prefix('admin')->name('admin.')->grou
     Route::get('/applications/{application}', [ApplicationReviewController::class, 'show'])->name('applications.show');
     Route::put('/applications/{application}/details', [ApplicationReviewController::class, 'updateDetails'])
         ->name('applications.details.update');
+    Route::post('/applications/{application}/api-credentials', [ApplicationReviewController::class, 'issueCredentials'])
+        ->name('applications.credentials.issue');
     Route::put('/applications/{application}/environments/{environment}', [ApplicationReviewController::class, 'updateEnvironment'])
         ->whereIn('environment', ['development', 'test', 'production'])
         ->name('applications.environments.update');

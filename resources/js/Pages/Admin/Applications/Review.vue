@@ -17,7 +17,17 @@ const props = defineProps({
     bedrockGeo: { type: String, default: 'ca' },
     classifications: { type: Object, default: () => ({}) },
     budgetCurrencies: { type: Array, default: () => ['USD'] },
+    apiDirectoryConfigured: { type: Boolean, default: false },
 });
+
+const credentialsForm = useForm({});
+const hasIssuedCredentials = computed(() => !!props.application.api_directory_client_id && !!props.application.api_directory_issued_at);
+const issueCredentials = () => {
+    if (hasIssuedCredentials.value && !window.confirm('Regenerate the client secret? The current secret stops working immediately.')) {
+        return;
+    }
+    credentialsForm.post(`/admin/applications/${props.application.public_id}/api-credentials`, { preserveScroll: true });
+};
 
 const statusLabel = (status) => status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
@@ -232,7 +242,22 @@ const rejectPromotion = (promotion) => {
                             <div class="col-sm-6 mb-2"><dt class="small text-secondary fw-normal">Primary contact</dt><dd class="mb-0">{{ application.primary_contact_name }}</dd></div>
                             <div class="col-sm-6 mb-2"><dt class="small text-secondary fw-normal">Technical contact</dt><dd class="mb-0">{{ application.technical_contact_name }}</dd></div>
                             <div class="col-sm-6 mb-2"><dt class="small text-secondary fw-normal">Data classification</dt><dd class="mb-0">{{ application.data_classification }}</dd></div>
-                            <div class="col-sm-6 mb-2"><dt class="small text-secondary fw-normal">API directory client ID</dt><dd class="mb-0 text-break"><code>{{ application.api_directory_client_id }}</code></dd></div>
+                            <div class="col-sm-6 mb-2"><dt class="small text-secondary fw-normal">API directory client ID</dt><dd class="mb-0 text-break"><code>{{ application.api_directory_client_id || '—' }}</code></dd></div>
+                            <div class="col-sm-6 mb-2">
+                                <dt class="small text-secondary fw-normal">API directory credentials</dt>
+                                <dd class="mb-0 d-flex align-items-center gap-2 flex-wrap">
+                                    <span v-if="application.api_directory_issued_at" class="small">Issued {{ new Date(application.api_directory_issued_at).toLocaleString() }}</span>
+                                    <span v-else class="small text-secondary">Not issued</span>
+                                    <button
+                                        v-if="apiDirectoryConfigured"
+                                        type="button"
+                                        class="btn btn-outline-primary btn-sm py-0"
+                                        :disabled="credentialsForm.processing"
+                                        @click="issueCredentials"
+                                    >{{ hasIssuedCredentials ? 'Regenerate secret' : 'Issue credentials' }}</button>
+                                    <span v-else class="small text-secondary">(APS issuer not configured)</span>
+                                </dd>
+                            </div>
                             <div class="col-sm-6 mb-2"><dt class="small text-secondary fw-normal">BCAIGW application ID</dt><dd class="mb-0 text-break"><code>{{ application.gateway_key }}</code></dd></div>
                         </dl>
                         <div class="mt-2">

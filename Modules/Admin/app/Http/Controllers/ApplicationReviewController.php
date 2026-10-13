@@ -8,6 +8,7 @@ use App\Models\ApplicationEnvironment;
 use App\Models\ApplicationEnvironmentPromotion;
 use App\Models\PublicModelAlias;
 use App\Models\User;
+use App\Services\ApiDirectory\CredentialIssuer;
 use App\Services\Applications\PromotionService;
 use App\Services\Gateway\ApplicationUsageService;
 use Illuminate\Http\RedirectResponse;
@@ -27,6 +28,7 @@ class ApplicationReviewController extends Controller
         private readonly ApplicationUsageService $usage,
         private readonly BedrockModelCards $modelCards,
         private readonly PromotionService $promotions,
+        private readonly CredentialIssuer $credentials,
     ) {}
     /**
      * Allowed administrator transitions: current status => list of target statuses.
@@ -124,6 +126,7 @@ class ApplicationReviewController extends Controller
             'changeRequests' => $this->changeRequestsPayload($application),
             'classifications' => config('gateway.classifications'),
             'budgetCurrencies' => config('gateway.budget_currencies', ['USD']),
+            'apiDirectoryConfigured' => $this->credentials->isConfigured(),
         ]);
     }
 
@@ -375,7 +378,7 @@ class ApplicationReviewController extends Controller
             'technical_contact_email' => ['nullable', 'email:rfc', 'max:254'],
             'data_classification' => ['required', 'string', Rule::in(array_keys(config('gateway.classifications')))],
             'api_directory_client_id' => [
-                'required', 'string', 'max:255', 'regex:/^[A-Za-z0-9._:-]+$/',
+                'nullable', 'string', 'max:255', 'regex:/^[A-Za-z0-9._:-]+$/',
                 Rule::unique('applications', 'api_directory_client_id')->ignore($application->id),
             ],
         ]);
@@ -461,7 +464,7 @@ class ApplicationReviewController extends Controller
             'from_status' => $application->status,
             'to_status' => $application->status,
             'actor_user_id' => $actor->id,
-            'note' => $note.' '.implode(', ', array_keys($metadata['changes'] ?? $metadata['details'] ?? [])),
+            'note' => trim($note.' '.implode(', ', array_keys($metadata['changes'] ?? $metadata['details'] ?? []))),
             'metadata' => $metadata,
         ]);
     }
@@ -573,7 +576,48 @@ class ApplicationReviewController extends Controller
             }
         });
 
+        // Onboarding: issue the API Directory client the first time the application goes live.
+        if ($validated['to_status'] === Application::STATUS_ACTIVE
+            && (string) $application->api_directory_client_id === ''
+            && $this->credentials->isConfigured()) {
+            try {
+                $this->credentials->issue($application);
+                $this->recordAdminChange($application, $request->user(), 'API Directory credentials issued.', [
+                    'api_directory' => ['client_id' => $application->api_directory_client_id],
+                ]);
+            } catch (RuntimeException $e) {
+                report($e);
+
+                return back()->with('error', 'Application activated, but API Directory credentials could not be issued: '.$e->getMessage());
+            }
+        }
+
         return back()->with('success', 'Application status updated.');
+    }
+
+    /**
+     * Issue API Directory credentials, or rotate the secret when a client already exists.
+     */
+    public function issueCredentials(Request $request, Application $application): RedirectResponse
+    {
+        $regenerate = (string) $application->api_directory_client_id !== '' && $application->api_directory_issued_at !== null;
+
+        try {
+            $regenerate ? $this->credentials->regenerate($application) : $this->credentials->issue($application);
+        } catch (RuntimeException $e) {
+            report($e);
+
+            return back()->with('error', $e->getMessage());
+        }
+
+        $this->recordAdminChange(
+            $application,
+            $request->user(),
+            $regenerate ? 'API Directory client secret regenerated.' : 'API Directory credentials issued.',
+            ['api_directory' => ['client_id' => $application->api_directory_client_id]],
+        );
+
+        return back()->with('success', $regenerate ? 'Client secret regenerated.' : 'API Directory credentials issued.');
     }
 
     /**

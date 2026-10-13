@@ -17,6 +17,9 @@ Route::middleware(['auth'])->prefix('portal')->name('portal.')->group(function (
     Route::get('/applications/{application}/edit', [ApplicationController::class, 'edit'])->name('applications.edit');
     Route::put('/applications/{application}', [ApplicationController::class, 'update'])->name('applications.update');
     Route::post('/applications/{application}/submit', [ApplicationController::class, 'submit'])->name('applications.submit');
+    Route::post('/applications/{application}/credentials/secret', [ApplicationController::class, 'revealSecret'])
+        ->middleware('throttle:10,1')
+        ->name('applications.credentials.secret');
     Route::post('/applications/{application}/promote', [ApplicationController::class, 'promote'])->name('applications.promote');
     Route::post('/applications/{application}/models', [ApplicationController::class, 'changeModels'])->name('applications.models.change');
 

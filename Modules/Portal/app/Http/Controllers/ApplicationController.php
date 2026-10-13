@@ -9,6 +9,7 @@ use App\Models\ApplicationEnvironmentPromotion;
 use App\Models\PublicModelAlias;
 use App\Services\Applications\PromotionService;
 use App\Services\Gateway\ApplicationUsageService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -133,11 +134,33 @@ class ApplicationController extends Controller
                 'viewAdminTools' => $isAdmin,
             ],
             'apiUsage' => [
-                'token_endpoint' => config('gateway.api_auth.token_endpoint'),
+                'token_endpoint' => $application->api_directory_token_endpoint ?: config('gateway.api_auth.token_endpoint'),
                 'audience' => config('gateway.api_auth.audience'),
                 'base_url' => config('gateway.api_auth.base_url'),
             ],
+            'credentials' => [
+                'client_id' => $application->api_directory_client_id,
+                'token_endpoint' => $application->api_directory_token_endpoint ?: config('gateway.api_auth.token_endpoint'),
+                'flow' => $application->api_directory_flow,
+                'issued_at' => $application->api_directory_issued_at?->toIso8601String(),
+                'has_secret' => (string) $application->api_directory_client_secret !== '',
+            ],
         ]);
+    }
+
+    /**
+     * Reveal the issued API Directory client secret to application members.
+     */
+    public function revealSecret(Request $request, Application $application): JsonResponse
+    {
+        $this->authorize('view', $application);
+
+        $secret = (string) $application->api_directory_client_secret;
+        abort_if($secret === '', 404, 'No client secret has been issued for this application.');
+
+        return response()
+            ->json(['client_secret' => $secret])
+            ->header('Cache-Control', 'no-store');
     }
 
     /**

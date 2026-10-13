@@ -20,7 +20,6 @@ const initialCapabilities =
 
 const form = useForm({
     name: props.application?.name ?? '',
-    api_directory_client_id: props.application?.api_directory_client_id ?? '',
     ministry_organization: props.application?.ministry_organization ?? '',
     purpose_use_case: props.application?.purpose_use_case ?? '',
     primary_contact_name: props.application?.primary_contact_name ?? '',
@@ -75,10 +74,8 @@ const submit = () => {
                             <input v-model="form.name" type="text" class="form-control" :class="{ 'is-invalid': form.errors.name }" />
                             <div v-if="form.errors.name" class="invalid-feedback">{{ form.errors.name }}</div>
                         </div>
-                        <div class="col-sm-6">
-                            <label class="form-label">API directory client ID</label>
-                            <input v-model="form.api_directory_client_id" type="text" class="form-control" :class="{ 'is-invalid': form.errors.api_directory_client_id }" />
-                            <div v-if="form.errors.api_directory_client_id" class="invalid-feedback">{{ form.errors.api_directory_client_id }}</div>
+                        <div class="col-sm-6 d-flex align-items-end">
+                            <p class="text-secondary small mb-2">Your API Directory client ID and secret are issued automatically once the application is approved and activated.</p>
                         </div>
                         <div class="col-12">
                             <label class="form-label">Ministry / organization</label>

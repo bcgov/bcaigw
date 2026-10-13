@@ -106,6 +106,26 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | API Program Services (API Directory) credential issuer
+    |--------------------------------------------------------------------------
+    |
+    | Issues an API Directory client (client ID + secret) for each application
+    | on activation, via POST /ds/api/v3/gateways/{gatewayId}/consumers. The
+    | service account needs the CredentialIssuer.Generate scope on the gateway.
+    |
+    */
+    'aps' => [
+        'base_url' => env('APS_BASE_URL', 'https://api.gov.bc.ca'),
+        'gateway_id' => env('APS_GATEWAY_ID'),
+        // Product Environment appId: GET /ds/api/v3/gateways/{gatewayId}/products -> [].environments[].appId
+        'environment_app_id' => env('APS_ENVIRONMENT_APP_ID'),
+        'token_url' => env('APS_TOKEN_URL'),
+        'client_id' => env('APS_CLIENT_ID'),
+        'client_secret' => env('APS_CLIENT_SECRET'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Upstream LLM providers
     |--------------------------------------------------------------------------
     |

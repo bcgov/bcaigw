@@ -42,7 +42,14 @@ class Application extends Model
         'budget_currency',
         'configuration_ready',
         'created_by',
+        'api_directory_client_secret',
+        'api_directory_token_endpoint',
+        'api_directory_flow',
+        'api_directory_issued_at',
     ];
+
+    // The secret is only ever returned through the explicit reveal endpoint.
+    protected $hidden = ['api_directory_client_secret'];
 
     protected static function booted(): void
     {
@@ -62,6 +69,8 @@ class Application extends Model
             'configuration_ready' => 'boolean',
             'cost_budget_monthly' => 'decimal:2',
             'cost_budget_daily' => 'decimal:2',
+            'api_directory_client_secret' => 'encrypted',
+            'api_directory_issued_at' => 'datetime',
         ];
     }
 

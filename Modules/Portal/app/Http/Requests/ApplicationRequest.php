@@ -40,7 +40,8 @@ class ApplicationRequest extends FormRequest
         $rules = [
             'name' => ['required', 'string', 'max:150'],
             'api_directory_client_id' => [
-                'required',
+                'sometimes',
+                'nullable',
                 'string',
                 'max:255',
                 'regex:/^[A-Za-z0-9._:-]+$/',
