@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Modules\Admin\Http\Controllers\AdminController;
+use Modules\Admin\Http\Controllers\ApplicationDebugLogController;
 use Modules\Admin\Http\Controllers\ApplicationReviewController;
 use Modules\Admin\Http\Controllers\ModelControlController;
 use Modules\Admin\Http\Controllers\UserRoleController;
@@ -22,6 +23,11 @@ Route::middleware(['auth', 'superadmin'])->prefix('admin')->name('admin.')->grou
     Route::put('/applications/{application}/environments/{environment}', [ApplicationReviewController::class, 'updateEnvironment'])
         ->whereIn('environment', ['development', 'test', 'production'])
         ->name('applications.environments.update');
+    Route::get('/applications/{application}/debug-logs', [ApplicationDebugLogController::class, 'index'])
+        ->name('applications.debug-logs.index');
+    Route::get('/applications/{application}/debug-logs/{log}', [ApplicationDebugLogController::class, 'show'])
+        ->whereNumber('log')
+        ->name('applications.debug-logs.show');
     Route::post('/applications/{application}/transition', [ApplicationReviewController::class, 'transition'])
         ->name('applications.transition');
     Route::post('/applications/{application}/grants', [ApplicationReviewController::class, 'grantModel'])

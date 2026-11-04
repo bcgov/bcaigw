@@ -42,6 +42,7 @@ class ApplicationEnvironment extends Model
         return [
             'cost_budget_daily' => 'decimal:2',
             'cost_budget_monthly' => 'decimal:2',
+            'debug_enabled' => 'boolean',
             'approved_at' => 'datetime',
             'submitted_at' => 'datetime',
         ];

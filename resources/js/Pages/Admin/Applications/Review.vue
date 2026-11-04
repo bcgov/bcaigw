@@ -1,6 +1,7 @@
 <script setup>
 import { Link, router, useForm } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
+import axios from 'axios';
 import AdminLayout from '@/Layouts/AdminLayout.vue';
 
 const props = defineProps({
@@ -125,7 +126,7 @@ const saveDetails = () => {
 const editingEnv = ref(null);
 const envForm = useForm({
     status: 'active', rate_limit_per_minute: '', token_budget_daily: '', token_budget_monthly: '',
-    cost_budget_daily: '', cost_budget_monthly: '', budget_currency: 'USD',
+    cost_budget_daily: '', cost_budget_monthly: '', budget_currency: 'USD', debug_enabled: false,
 });
 const openEnvEdit = (env) => {
     envForm.clearErrors();
@@ -136,6 +137,7 @@ const openEnvEdit = (env) => {
     envForm.cost_budget_daily = env.cost_budget_daily ?? '';
     envForm.cost_budget_monthly = env.cost_budget_monthly ?? '';
     envForm.budget_currency = env.currency || 'USD';
+    envForm.debug_enabled = !!env.debug_enabled;
     editingEnv.value = env;
 };
 const saveEnv = () => {
@@ -145,6 +147,48 @@ const saveEnv = () => {
     });
 };
 const envMoney = (v, cur) => (v === null || v === undefined ? 'Not set' : `${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${cur}`);
+
+// Debug call log (environments with debug_enabled). Loaded on demand, admin-only.
+const debugEnv = ref('');
+const debugLogs = ref([]);
+const debugMeta = ref(null);
+const debugLoading = ref(false);
+const debugError = ref('');
+const debugDetail = ref(null);
+const debugDetailLoading = ref(false);
+
+const loadDebugLogs = async (page = 1) => {
+    debugLoading.value = true;
+    debugError.value = '';
+    try {
+        const { data } = await axios.get(`/admin/applications/${props.application.public_id}/debug-logs`, {
+            params: { environment: debugEnv.value || undefined, page },
+        });
+        debugLogs.value = data.data ?? [];
+        debugMeta.value = { current: data.current_page, last: data.last_page, total: data.total };
+    } catch (error) {
+        debugError.value = error.response?.data?.message || 'Could not load debug logs.';
+    } finally {
+        debugLoading.value = false;
+    }
+};
+
+const openDebugLog = async (log) => {
+    debugDetailLoading.value = true;
+    debugDetail.value = { ...log };
+    try {
+        const { data } = await axios.get(`/admin/applications/${props.application.public_id}/debug-logs/${log.id}`);
+        debugDetail.value = data.log;
+    } catch (error) {
+        debugDetail.value = { ...log, load_error: error.response?.data?.message || 'Could not load this entry.' };
+    } finally {
+        debugDetailLoading.value = false;
+    }
+};
+
+const pretty = (value) => JSON.stringify(value ?? null, null, 2);
+const statusClass = (code) => (code >= 200 && code < 300 ? 'text-bg-success' : (code >= 500 ? 'text-bg-danger' : 'text-bg-warning'));
+const debugEnabledEnvs = computed(() => props.environments.filter((e) => e.debug_enabled));
 
 const submitTransition = () => {
     form.post(`/admin/applications/${props.application.public_id}/transition`, {
@@ -618,7 +662,10 @@ const rejectPromotion = (promotion) => {
                         </thead>
                         <tbody>
                             <tr v-for="env in environments" :key="env.environment">
-                                <td class="fw-semibold">{{ env.label }}</td>
+                                <td class="fw-semibold">
+                                    {{ env.label }}
+                                    <span v-if="env.debug_enabled" class="badge text-bg-warning ms-1" title="Prompts and responses are being captured">Debug</span>
+                                </td>
                                 <td>
                                     <span class="badge rounded-pill"
                                           :class="env.status === 'active' ? 'text-bg-success' : (env.status === 'suspended' ? 'text-bg-danger' : 'text-bg-secondary')">
@@ -825,6 +872,76 @@ const rejectPromotion = (promotion) => {
 
         <section class="card shadow-sm mt-4">
             <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <h3 class="h5 fw-semibold mb-0">Debug call log</h3>
+                    <div class="d-flex align-items-center gap-2">
+                        <select v-model="debugEnv" class="form-select form-select-sm" style="min-width: 10rem;">
+                            <option value="">All environments</option>
+                            <option v-for="env in environments" :key="env.environment" :value="env.environment">{{ env.label }}</option>
+                        </select>
+                        <button type="button" class="btn btn-outline-primary btn-sm" :disabled="debugLoading" @click="loadDebugLogs(1)">
+                            <span v-if="debugLoading" class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                            {{ debugMeta ? 'Refresh' : 'Load calls' }}
+                        </button>
+                    </div>
+                </div>
+                <p class="text-secondary small mt-1">
+                    Full request/response capture for environments with <strong>Debug</strong> enabled
+                    (<template v-if="debugEnabledEnvs.length">{{ debugEnabledEnvs.map((e) => e.label).join(', ') }}</template><template v-else>none currently</template>).
+                    Inline files and images are summarized, not stored. Entries expire automatically.
+                </p>
+                <div v-if="debugError" class="alert alert-danger py-2 small">{{ debugError }}</div>
+                <div v-if="debugMeta" class="table-responsive">
+                    <table class="table table-sm table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Env</th>
+                                <th>Operation</th>
+                                <th>Model</th>
+                                <th>Inputs</th>
+                                <th class="text-end">Status</th>
+                                <th class="text-end">Tokens</th>
+                                <th class="text-end">Latency</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-if="!debugLogs.length"><td colspan="9" class="text-secondary py-3">No captured calls.</td></tr>
+                            <tr v-for="log in debugLogs" :key="log.id">
+                                <td class="small text-nowrap">{{ new Date(log.created_at).toLocaleString() }}</td>
+                                <td class="small">{{ log.environment }}</td>
+                                <td class="small">{{ log.operation }}</td>
+                                <td class="small">
+                                    <code>{{ log.requested_model }}</code>
+                                    <div v-if="log.upstream_model" class="text-secondary">{{ log.upstream_model }}</div>
+                                </td>
+                                <td class="small">
+                                    <span v-if="log.has_image" class="badge text-bg-info me-1">image</span>
+                                    <span v-if="log.has_file" class="badge text-bg-info me-1">file</span>
+                                    <span v-if="!log.has_image && !log.has_file" class="text-secondary">text</span>
+                                </td>
+                                <td class="text-end">
+                                    <span class="badge" :class="statusClass(log.http_status)">{{ log.http_status }}</span>
+                                    <div v-if="log.error_code" class="small text-secondary">{{ log.error_code }}</div>
+                                </td>
+                                <td class="text-end small">{{ log.prompt_tokens ?? '—' }} / {{ log.completion_tokens ?? '—' }}</td>
+                                <td class="text-end small">{{ log.latency_ms != null ? `${log.latency_ms} ms` : '—' }}</td>
+                                <td class="text-end"><button type="button" class="btn btn-outline-secondary btn-sm py-0" @click="openDebugLog(log)">View</button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div v-if="debugMeta.last > 1" class="d-flex align-items-center gap-2 mt-2 small">
+                        <button type="button" class="btn btn-outline-secondary btn-sm py-0" :disabled="debugMeta.current <= 1 || debugLoading" @click="loadDebugLogs(debugMeta.current - 1)">Previous</button>
+                        <span>Page {{ debugMeta.current }} of {{ debugMeta.last }} · {{ debugMeta.total }} calls</span>
+                        <button type="button" class="btn btn-outline-secondary btn-sm py-0" :disabled="debugMeta.current >= debugMeta.last || debugLoading" @click="loadDebugLogs(debugMeta.current + 1)">Next</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="card shadow-sm mt-4">
+            <div class="card-body">
                 <h3 class="h5 fw-semibold">Lifecycle history</h3>
                 <ol v-if="application.lifecycle_history?.length" class="list-unstyled mb-0 mt-2">
                     <li v-for="entry in application.lifecycle_history" :key="entry.id" class="border-start border-2 ps-3 mb-3">
@@ -956,11 +1073,68 @@ const rejectPromotion = (promotion) => {
                                 </select>
                                 <div class="invalid-feedback">{{ envForm.errors.budget_currency }}</div>
                             </div>
+                            <div class="col-12">
+                                <div class="form-check form-switch">
+                                    <input id="env-debug" v-model="envForm.debug_enabled" type="checkbox" class="form-check-input" role="switch" />
+                                    <label for="env-debug" class="form-check-label">Debug: capture API calls</label>
+                                </div>
+                                <div class="form-text">Records the model, prompt, attachments (summarized), response code and response content for every call in this environment. Use temporarily; prompts may contain sensitive data.</div>
+                            </div>
                         </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" @click="editingEnv = null">Cancel</button>
                         <button type="button" class="btn btn-primary" :disabled="envForm.processing" @click="saveEnv">Save changes</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Debug call detail -->
+        <div v-if="debugDetail" class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,.5);">
+            <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            {{ debugDetail.operation }} · <code>{{ debugDetail.requested_model }}</code>
+                            <span class="badge ms-2" :class="statusClass(debugDetail.http_status)">HTTP {{ debugDetail.http_status }}</span>
+                        </h5>
+                        <button type="button" class="btn-close" @click="debugDetail = null"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div v-if="debugDetailLoading" class="text-secondary"><span class="spinner-border spinner-border-sm me-2"></span>Loading…</div>
+                        <div v-else-if="debugDetail.load_error" class="alert alert-danger py-2">{{ debugDetail.load_error }}</div>
+                        <template v-else>
+                            <dl class="row small mb-3">
+                                <dt class="col-sm-3 text-secondary fw-normal">Request ID</dt><dd class="col-sm-9"><code>{{ debugDetail.request_id }}</code></dd>
+                                <dt class="col-sm-3 text-secondary fw-normal">Environment</dt><dd class="col-sm-9">{{ debugDetail.environment }}</dd>
+                                <dt class="col-sm-3 text-secondary fw-normal">Upstream model</dt><dd class="col-sm-9"><code>{{ debugDetail.upstream_model || '—' }}</code></dd>
+                                <dt class="col-sm-3 text-secondary fw-normal">Upstream status</dt><dd class="col-sm-9">{{ debugDetail.upstream_status ?? '—' }}</dd>
+                                <dt class="col-sm-3 text-secondary fw-normal">Time</dt><dd class="col-sm-9">{{ new Date(debugDetail.created_at).toLocaleString() }}</dd>
+                                <dt v-if="debugDetail.attachments?.length" class="col-sm-3 text-secondary fw-normal">Attachments</dt>
+                                <dd v-if="debugDetail.attachments?.length" class="col-sm-9">
+                                    <div v-for="(a, i) in debugDetail.attachments" :key="i">
+                                        <span class="badge text-bg-info me-1">{{ a.type }}</span>
+                                        {{ a.filename || '' }} {{ a.mime || '' }}
+                                        <span v-if="a.bytes != null" class="text-secondary">· ~{{ Number(a.bytes).toLocaleString() }} bytes</span>
+                                        <span v-if="a.source === 'url'" class="text-secondary text-break">· {{ a.url }}</span>
+                                    </div>
+                                </dd>
+                            </dl>
+                            <div class="row g-3">
+                                <div class="col-lg-6">
+                                    <label class="form-label small fw-semibold text-uppercase">Request <span v-if="debugDetail.request_truncated" class="badge text-bg-secondary">truncated</span></label>
+                                    <pre class="bg-light border rounded p-3 small mb-0" style="max-height: 32rem; overflow: auto; white-space: pre-wrap; word-break: break-word;">{{ pretty(debugDetail.request_payload) }}</pre>
+                                </div>
+                                <div class="col-lg-6">
+                                    <label class="form-label small fw-semibold text-uppercase">Response <span v-if="debugDetail.response_truncated" class="badge text-bg-secondary">truncated</span></label>
+                                    <pre class="bg-light border rounded p-3 small mb-0" style="max-height: 32rem; overflow: auto; white-space: pre-wrap; word-break: break-word;">{{ pretty(debugDetail.response_payload) }}</pre>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @click="debugDetail = null">Close</button>
                     </div>
                 </div>
             </div>

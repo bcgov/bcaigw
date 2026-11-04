@@ -205,6 +205,7 @@ class ApplicationReviewController extends Controller
                 'cost_budget_daily' => $record->cost_budget_daily !== null ? (float) $record->cost_budget_daily : null,
                 'cost_budget_monthly' => $record->cost_budget_monthly !== null ? (float) $record->cost_budget_monthly : null,
                 'currency' => $record->budget_currency ?: (string) config('gateway.default_budget_currency', 'USD'),
+                'debug_enabled' => (bool) $record->debug_enabled,
                 'model_count' => $application->modelGrants()
                     ->where('environment', $environment)
                     ->where('enabled', true)
@@ -414,6 +415,7 @@ class ApplicationReviewController extends Controller
             'cost_budget_daily' => ['nullable', 'numeric', 'min:0', 'max:10000000'],
             'cost_budget_monthly' => ['nullable', 'numeric', 'min:0', 'max:10000000'],
             'budget_currency' => ['required', 'string', Rule::in(config('gateway.budget_currencies', ['USD']))],
+            'debug_enabled' => ['sometimes', 'boolean'],
         ]);
 
         DB::transaction(function () use ($application, $record, $validated, $request): void {

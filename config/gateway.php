@@ -34,6 +34,13 @@ return [
         'test' => [],
         'production' => [],
     ],
+
+    // Per-environment debug capture (application_environments.debug_enabled).
+    'debug' => [
+        'retention_days' => (int) env('GATEWAY_DEBUG_RETENTION_DAYS', 14),
+        // Cap on each stored request/response body (UTF-8 bytes) before truncation.
+        'max_payload_bytes' => (int) env('GATEWAY_DEBUG_MAX_PAYLOAD_BYTES', 65536),
+    ],
     'classifications' => [
         'public' => 'Public',
         'protected_a' => 'Protected A',

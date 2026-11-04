@@ -4,10 +4,12 @@ namespace App\Http\Controllers\Gateway;
 
 use App\Http\Controllers\Controller;
 use App\Models\Application;
+use App\Models\ApplicationEnvironment;
 use App\Models\GatewayCallAttempt;
 use App\Models\GatewayUsageRollup;
 use App\Services\Gateway\Forwarders\ChatForwarderManager;
 use App\Services\Gateway\GatewayAccessGuard;
+use App\Services\Gateway\GatewayDebugRecorder;
 use App\Services\Gateway\GatewayException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -22,6 +24,7 @@ class GatewayController extends Controller
     public function __construct(
         private readonly GatewayAccessGuard $guard,
         private readonly ChatForwarderManager $forwarder,
+        private readonly GatewayDebugRecorder $debug,
     ) {}
 
     /**
@@ -85,13 +88,15 @@ class GatewayController extends Controller
         }
 
         $environment = $validated['environment'] ?? $request->header('X-BCAIGW-Environment');
+        $trace = ['operation' => 'chat.completions', 'requested_model' => $validated['model'], 'request' => $validated];
 
         try {
             $resolved = $this->guard->authorize($application, $validated['model'], 'chat', $environment);
         } catch (GatewayException $e) {
-            return response()->json($e->toBody(), $e->status);
+            return $this->traced($application, $this->environmentRecord($application, $environment), $trace, response()->json($e->toBody(), $e->status));
         }
 
+        $trace['upstream_model'] = $resolved['target']->provider_model_identifier;
         $messages = $this->normalizeMessages($validated['messages']);
 
         // Reject features the resolved model does not advertise, so callers get a
@@ -104,7 +109,7 @@ class GatewayController extends Controller
         );
 
         if ($capabilityError !== null) {
-            return $this->error($capabilityError, 422, 'capability_unsupported');
+            return $this->traced($application, $resolved['environment'], $trace, $this->error($capabilityError, 422, 'capability_unsupported'));
         }
 
         $options = array_filter([
@@ -115,6 +120,7 @@ class GatewayController extends Controller
         ], fn ($value) => $value !== null);
 
         $requestId = (string) Str::uuid();
+        $trace['request_id'] = $requestId;
         $attempt = $this->openAttempt($requestId, $application, $resolved);
 
         $result = $this->forwarder->forward($resolved['target'], $messages, $options);
@@ -123,10 +129,10 @@ class GatewayController extends Controller
         $this->recordUsage($application, $resolved, $result);
 
         if (! $result['ok']) {
-            return $this->error($result['error'] ?? 'The upstream model call failed.', 502, 'upstream_error');
+            return $this->traced($application, $resolved['environment'], $trace, $this->error($result['error'] ?? 'The upstream model call failed.', 502, 'upstream_error'), $result);
         }
 
-        return response()->json([
+        return $this->traced($application, $resolved['environment'], $trace, response()->json([
             'id' => 'chatcmpl-'.$requestId,
             'object' => 'chat.completion',
             'created' => Carbon::now()->timestamp,
@@ -141,7 +147,7 @@ class GatewayController extends Controller
                 'completion_tokens' => $result['usage']['output_tokens'],
                 'total_tokens' => $result['usage']['total_tokens'],
             ],
-        ]);
+        ]), $result);
     }
 
     /**
@@ -171,13 +177,15 @@ class GatewayController extends Controller
         ]);
 
         $environment = $validated['environment'] ?? $request->header('X-BCAIGW-Environment');
+        $trace = ['operation' => 'images.generations', 'requested_model' => $validated['model'], 'request' => $validated];
 
         try {
             $resolved = $this->guard->authorize($application, $validated['model'], 'image_generation', $environment);
         } catch (GatewayException $e) {
-            return response()->json($e->toBody(), $e->status);
+            return $this->traced($application, $this->environmentRecord($application, $environment), $trace, response()->json($e->toBody(), $e->status));
         }
 
+        $trace['upstream_model'] = $resolved['target']->provider_model_identifier;
         $options = array_filter([
             'n' => $validated['n'] ?? null,
             'size' => $validated['size'] ?? null,
@@ -187,6 +195,7 @@ class GatewayController extends Controller
         ], fn ($value) => $value !== null);
 
         $requestId = (string) Str::uuid();
+        $trace['request_id'] = $requestId;
         $attempt = $this->openAttempt($requestId, $application, $resolved, 'images.generations');
 
         $result = $this->forwarder->forwardImage($resolved['target'], $validated['prompt'], $options);
@@ -195,13 +204,13 @@ class GatewayController extends Controller
         $this->recordUsage($application, $resolved, $result);
 
         if (! $result['ok']) {
-            return $this->error($result['error'] ?? 'The upstream image call failed.', 502, 'upstream_error');
+            return $this->traced($application, $resolved['environment'], $trace, $this->error($result['error'] ?? 'The upstream image call failed.', 502, 'upstream_error'), $result);
         }
 
-        return response()->json([
+        return $this->traced($application, $resolved['environment'], $trace, response()->json([
             'created' => Carbon::now()->timestamp,
             'data' => $result['images'],
-        ]);
+        ]), $result);
     }
 
     /**
@@ -228,19 +237,22 @@ class GatewayController extends Controller
         ]);
 
         $environment = $validated['environment'] ?? $request->header('X-BCAIGW-Environment');
+        $trace = ['operation' => 'embeddings', 'requested_model' => $validated['model'], 'request' => $validated];
 
         try {
             $resolved = $this->guard->authorize($application, $validated['model'], 'embeddings', $environment);
         } catch (GatewayException $e) {
-            return response()->json($e->toBody(), $e->status);
+            return $this->traced($application, $this->environmentRecord($application, $environment), $trace, response()->json($e->toBody(), $e->status));
         }
 
+        $trace['upstream_model'] = $resolved['target']->provider_model_identifier;
         $options = array_filter([
             'encoding_format' => $validated['encoding_format'] ?? null,
             'dimensions' => $validated['dimensions'] ?? null,
         ], fn ($value) => $value !== null);
 
         $requestId = (string) Str::uuid();
+        $trace['request_id'] = $requestId;
         $attempt = $this->openAttempt($requestId, $application, $resolved, 'embeddings');
 
         $result = $this->forwarder->forwardEmbeddings($resolved['target'], $validated['input'], $options);
@@ -249,10 +261,10 @@ class GatewayController extends Controller
         $this->recordUsage($application, $resolved, $result);
 
         if (! $result['ok']) {
-            return $this->error($result['error'] ?? 'The upstream embeddings call failed.', 502, 'upstream_error');
+            return $this->traced($application, $resolved['environment'], $trace, $this->error($result['error'] ?? 'The upstream embeddings call failed.', 502, 'upstream_error'), $result);
         }
 
-        return response()->json([
+        return $this->traced($application, $resolved['environment'], $trace, response()->json([
             'object' => 'list',
             'data' => array_map(fn (array $embedding) => [
                 'object' => 'embedding',
@@ -264,7 +276,7 @@ class GatewayController extends Controller
                 'prompt_tokens' => $result['usage']['input_tokens'],
                 'total_tokens' => $result['usage']['total_tokens'],
             ],
-        ]);
+        ]), $result);
     }
 
     /**
@@ -292,18 +304,21 @@ class GatewayController extends Controller
         ]);
 
         $environment = $validated['environment'] ?? $request->header('X-BCAIGW-Environment');
+        $trace = ['operation' => 'rerank', 'requested_model' => $validated['model'], 'request' => $validated];
 
         try {
             $resolved = $this->guard->authorize($application, $validated['model'], 'rerank', $environment);
         } catch (GatewayException $e) {
-            return response()->json($e->toBody(), $e->status);
+            return $this->traced($application, $this->environmentRecord($application, $environment), $trace, response()->json($e->toBody(), $e->status));
         }
 
+        $trace['upstream_model'] = $resolved['target']->provider_model_identifier;
         $options = array_filter([
             'top_n' => $validated['top_n'] ?? null,
         ], fn ($value) => $value !== null);
 
         $requestId = (string) Str::uuid();
+        $trace['request_id'] = $requestId;
         $attempt = $this->openAttempt($requestId, $application, $resolved, 'rerank');
 
         $result = $this->forwarder->forwardRerank($resolved['target'], $validated['query'], $validated['documents'], $options);
@@ -312,14 +327,14 @@ class GatewayController extends Controller
         $this->recordUsage($application, $resolved, $result);
 
         if (! $result['ok']) {
-            return $this->error($result['error'] ?? 'The upstream rerank call failed.', 502, 'upstream_error');
+            return $this->traced($application, $resolved['environment'], $trace, $this->error($result['error'] ?? 'The upstream rerank call failed.', 502, 'upstream_error'), $result);
         }
 
-        return response()->json([
+        return $this->traced($application, $resolved['environment'], $trace, response()->json([
             'object' => 'list',
             'model' => $validated['model'],
             'results' => $result['results'],
-        ]);
+        ]), $result);
     }
 
     private function application(Request $request): Application
@@ -484,5 +499,44 @@ class GatewayController extends Controller
         return response()->json([
             'error' => ['message' => $message, 'type' => 'invalid_request_error', 'code' => $code],
         ], $status);
+    }
+
+    /**
+     * Records the exchange to the debug log when the environment has debug_enabled,
+     * then returns the response unchanged.
+     *
+     * @param  array{operation: string, requested_model: ?string, request: array<string, mixed>, request_id?: string, upstream_model?: ?string}  $trace
+     * @param  array<string, mixed>|null  $result
+     */
+    private function traced(Application $application, ?ApplicationEnvironment $environment, array $trace, JsonResponse $response, ?array $result = null): JsonResponse
+    {
+        if ($this->debug->enabledFor($environment)) {
+            $body = $response->getData(true);
+
+            $this->debug->record($application, $environment, [
+                'request_id' => $trace['request_id'] ?? (string) Str::uuid(),
+                'operation' => $trace['operation'],
+                'requested_model' => $trace['requested_model'],
+                'upstream_model' => $trace['upstream_model'] ?? null,
+                'request' => $trace['request'],
+                'http_status' => $response->getStatusCode(),
+                'response' => $body,
+                'upstream_status' => $result['http_status'] ?? null,
+                'error_code' => is_array($body) ? data_get($body, 'error.code') : null,
+                'latency_ms' => $result['latency_ms'] ?? null,
+                'prompt_tokens' => $result['usage']['input_tokens'] ?? null,
+                'completion_tokens' => $result['usage']['output_tokens'] ?? null,
+            ]);
+        }
+
+        return $response;
+    }
+
+    /**
+     * The environment record for a call rejected before authorization resolved it.
+     */
+    private function environmentRecord(Application $application, ?string $environment): ?ApplicationEnvironment
+    {
+        return ($environment === null || $environment === '') ? null : $application->environment($environment);
     }
 }
